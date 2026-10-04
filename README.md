@@ -16,7 +16,7 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 
 ## PotteryRadialSections 操作ガイド
 
-`pottery_radial_sections.py`（v0.6.0）は、水平断面の楕円中心から器軸のXY位置を推定し、その軸を通る放射状の縦断面を抽出します。断面からの容量計算も実装しています。現在はCLIで操作します。
+`pottery_radial_sections.py`（v0.7.0）は、水平断面の楕円中心から器軸のXY位置を推定し、その軸を通る放射状の縦断面を抽出します。断面からの容量計算も実装しています。現在はCLIで操作します。
 
 ### 1. 入力モデルと環境を準備する
 
@@ -108,6 +108,7 @@ python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode 
 | `--min-angular-valid-fraction` | `0.75` | `optimized` / `angular` の各高さで必要な有効方向の割合 |
 | `--output-dir` | 自動設定 | 出力先を明示 |
 | `--no-visualization` | 無効 | 参照PNGの生成を省略 |
+| `--no-section-overlay` | 無効 | XY重ね合わせPLYと中央値ポリラインの自動出力を省略 |
 
 角度間隔を細かくすると断面数が増えます。点群間隔や容量の高さ刻みを小さくすると、処理時間・出力サイズが増えます。入力メッシュ以上の細部が復元されるわけではありません。
 
@@ -127,11 +128,23 @@ python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode 
 | `radial_half_sections/` | 各方位の半断面のCSV、線分PLY、点群PLY |
 | `visualization/` | 断面斜視図、XZ／YZ器軸検証図、中心分布、集計表PNG |
 | `volume/` | 容量一覧CSV／JSON、方式別profile、内面点群・参照PNG（計算方式による） |
+| `section_overlay/all_full_sections_xy_points.ply` | 全縦断面を同一XY平面に重ねた方向別カラー点群 |
+| `section_overlay/all_full_sections_xy_edges.ply` | 全縦断面を同一XY平面に重ねた線分 |
+| `section_overlay/median_full_section_xy.ply` | 左右の内外面を含む中央値の閉じたポリライン（頂点＋edge） |
+| `section_overlay/median_full_section_xy.csv` | 頂点順序、外面／内面の区分、入力単位座標・mm座標 |
+| `section_overlay/overlay_qa.json` | 投影規約、口唇位置、中央値の採用／除外断面と理由 |
+
+**v0.7.0のXY重ね合わせ・中央値輪郭：** 既定で自動出力します。通常の断面PLYとは異なり、Xは器軸からの符号付き距離、Yは元モデルのZ（高さ）、Zは0です。器軸はX=0に揃え、高さの原点・入力単位は保持します。左右を平均して対称形にする処理は行いません。`--no-visualization` や `--volume-mode none` でも生成します。
+
+中央値は各全断面の正側／負側の口唇で輪郭を区切り、「正側口唇→外面・外底→負側口唇」と「負側口唇→内面・内底→正側口唇」を、それぞれ正規化弧長で再標本化した対応点の座標中央値です。同じ高さで半径を中央値にする方式とは異なります。頂点0は正側口唇、最後のedgeが頂点0へ戻ります。PLYを読み込むソフトがedge表示に対応している必要があります。
+
+口唇は各側の幾何学的最高点として自動検出し、平坦な口唇の線分では中央を使います。考古学的な口唇の同定を保証するものではありません。波状口縁、装飾、欠損がある場合は口唇位置を確認してください。中央値には、連続した閉輪郭で内外底を区別できる断面のみを採用します。開曲線・複数成分・分岐は補間して接続せず、除外理由をQAへ記録します。有効断面が2方向未満なら中央値PLY／CSVは生成しません。重ね合わせPLYには除外された断面も含めます。
 
 1. `visualization/axis_validation_xz.png`、`axis_validation_yz.png`、`axis_centers_xy.png` で器軸と中心の散らばりを確認します。
 2. `axis_summary.csv` の採用断面数・RMS中心偏差・傾きを確認し、内外面の中心差は `horizontal_sections.csv` で確認します。
 3. 全断面・半断面のPLYを入力メッシュと重ねて確認します。**出力PLYは入力と同じXYZ座標系・単位**です。点群PLYと線分PLYは三角形メッシュではありません。
 4. `volume/volume_summary.csv` または `.json` で容量（L）、方式、`status`、失敗理由を確認します。計算処理の終了だけで全方式の成功を判断しないでください。
+5. `section_overlay/overlay_qa.json` の有効方向数・口唇位置を確認し、中央値を重ね合わせ点群と比較します。少数の有効方向からの中央値が全体を代表するとは限りません。
 
 `--no-visualization` 指定時はPNGを生成しないため、CSV・PLYで確認します。古い出力を残したフォルダでは、過去のPNGなどが残る場合があります。
 

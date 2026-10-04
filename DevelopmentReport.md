@@ -9,6 +9,8 @@
 座標軸は全ツール共通の固定規約にせず、処理ごとに定義する。現行の継承アルゴリズムはZを器高／器軸としている。任意軸や投影方向を指定するadapterの共通化は今後行う。実測モデル、復元器形、ガイド、fit後配置は区別する。
 
 ## 2. 今回の移管とマージ
+- RadialSections v0.7.0：全縦断面のXY重ね合わせ（点群・線分PLY）を既定で自動出力。器軸基準の符号付き距離と元Z高さへ投影し、入力単位を保持。
+- 同版：左右を保持した内外面の中央値輪郭を、口唇で分割した外面・内面の正規化弧長登録による座標中央値として出力。正側口唇を頂点0とする閉ポリラインPLY／CSVとQAを追加。開曲線・複数成分・分岐は除外し、採用2方向未満なら中央値を生成しない。
 - PotteryVolumeCalculatorのcommit d756a5667f860705fa5ffaef8e4fb81dcd93e059からvoxel容量v1.3.2、破片境界v0.3.0、多解像度特徴v0.1.0、表面痕跡v0.1.0を移管。
 - 同commitのRadialSections v0.4.0を配布v0.6.0系へ統合。基本断面取得部分は同系統で、容量積分はpottery_volume_core.pyへ分離された版を採用。
 - DrawingCapacityも配布v0.6.0へ揃え、3D断面／2D図面で同じ数値コアを使う。
@@ -25,6 +27,7 @@
 | morphpot/asset_metadata.py | 単位・メタデータ解決、対応PLYハッシュ検証。Transform行列の適用は行わない |
 | vessel_voxel_volume.py | 全体voxel化、内腔seed検証、高さ制限flood fill、first-spill直前の最大保持容量、複数pitch検証、QA |
 | pottery_radial_sections.py | 水平断面楕円fit、内外輪郭、MAD中心選択、Z平行器軸位置、放射全断面／半断面、容量4方式 |
+| morphpot/section_overlay.py | 全断面のXY重ね合わせ、左右の口唇登録、内外面中央値の閉ポリライン、採用／除外QA |
 | pottery_volume_core.py | single / optimized / angular / ellipseの共通数値積分 |
 | pottery_drawing_capacity.py | 2D実測図の縮尺校正・内面デジタイズ・Drawing-Single容量、既存Tk GUI |
 | pottery_section_guide.py | 実測図から独立内外左右profile、水平ring、OBJ／PLYガイド、既存Tk GUI |
@@ -87,6 +90,8 @@ Surface Labを直接起動する場合は、現行Labのmm前提・投影規約�
 今回の環境：Python3.12、NumPy2.5.3、SciPy1.17.0、Trimesh5.1.1、Pillow12.3.0、NetworkX3.7。正式な対応版固定は今後行う。
 
 実施済み：
+- v0.7.0追加検証：既存metadata3＋overlay7＝pytest 10件passed。断面の方位・線分順序、mm/cm/m同値性、外れ方向に対する中央値、連続edgeと始点、開曲線・複数成分・余剰開線の除外、失敗／無効化時の古い出力削除を確認。
+- 人工開口容器のCLIで、容量・PNGを省略した場合も6方向の重ね合わせと472頂点の中央値輪郭が出力されることを確認。実資料の波状口縁・欠損資料による精度検証は未実施。
 - 全Pythonファイルのcompileall。
 - 新metadata契約テスト3件passed（旧rawハッシュ／行列の非再適用、asset一致と衝突検出、単位欠落・不整合）。
 - PotteryVolumeCore self-test：人工円柱の理論容量との一致。
@@ -103,6 +108,7 @@ voxelの粗いpitchによる値は近似であり、人工容器smokeはパイ�
 1. asset metadataのschema・出力生成、現在フレームと変換履歴、処理条件・入力ハッシュの統一。
 2. 実資料でvoxel／profile容量の収束・差分検証。入力単位m/cm/mmの同値性確認。
 3. 土器水平／縦断面の形態指標を拡張（現行はLithMorphと同じ全断面指標群を実装済みではない）。
+   口唇の現行検出は側ごとの最高点（平坦な口唇は中央）。波状口縁・装飾・欠損を含む資料での検証、必要に応じ手動の口唇指定や対応付けの改善を行う。
 4. 各処理の軸・観察方向adapter。Surface手法を共有し、土器用投影と石器用投影を分ける。
 5. 共通GUIを整え、独立Tk／QtモジュールのUIを計算コアから分離。
 6. 破片器形／ガイド器形／実測器形の結果区分、外面＋器厚から内面推定。
@@ -112,4 +118,3 @@ voxelの粗いpitchによる値は近似であり、人工容器smokeはパイ�
 
 ## 8. 出典・ライセンス
 新repoのMIT LICENSEを保持。過去CC0の出典や版履歴はSOURCE_PROVENANCE.jsonおよびTHIRD_PARTY_NOTICES.mdに記録する。移管元全体のGUIアプリや大型サンプルを丸ごと複製せず、必要コードのみ収録した。
-

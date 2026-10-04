@@ -8,8 +8,9 @@
     },
     {
       "path": "DevelopmentReport.md",
-      "sha256": "d476f66491f5f7b8d4d738cc394ac2fbabd823f9dfcf9e46e138c880bd027295",
-      "origin": "integration work 2026-10-05"
+      "sha256": "c987857cc2686347ca1d8f6a0ee83269dbe99e74630312d97925640e283d03b7",
+      "origin": "integration work 2026-10-05",
+      "last_modified_on": "2026-10-05"
     },
     {
       "path": "LICENSE",
@@ -23,8 +24,9 @@
     },
     {
       "path": "README.md",
-      "sha256": "f2163eb0d3b25c7d3d9b6e3185d393e4b6444b3b5af1bc1eb0bc7df3531aa5f8",
-      "origin": "integration work 2026-10-05"
+      "sha256": "3839967ac90ff42228509779bfacfaaeed5dc1c2a030ba7782d589f3a33996ad",
+      "origin": "integration work 2026-10-05",
+      "last_modified_on": "2026-10-05"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
@@ -87,12 +89,15 @@
     },
     {
       "path": "pottery_radial_sections.py",
-      "sha256": "9fee2464c0acc56c49430b321e615e7f0dac5b840139f0840778ecc76b4c9554",
+      "sha256": "65393dbec227c3d8c59ff5067041752e45e80bfd6541508778285183ec9a8cd0",
       "origin": "previously distributed pottery_radial_sections(5).py",
       "upstream_ref": null,
       "upstream_version": "v0.6.0",
       "upstream_sha256": "9fee2464c0acc56c49430b321e615e7f0dac5b840139f0840778ecc76b4c9554",
-      "modified": false
+      "modified": true,
+      "last_modified_on": "2026-10-05",
+      "local_version": "0.7.0",
+      "modification_note": "XY full-section overlays and lip-registered median full material polyline"
     },
     {
       "path": "pottery_reconstruction_3d.py",
@@ -168,6 +173,18 @@
       "upstream_version": "v1.3.2",
       "upstream_sha256": "c629c8f535db6f99a6c6bc0264f9bdd0ade3b64234ed468ffe7cf01fa42e341c",
       "modified": false
+    },
+    {
+      "path": "morphpot/section_overlay.py",
+      "origin": "MorphPot development 2026-10-05",
+      "sha256": "25157b75d9c34db5f5ef224676ee8d30cdb3402b3bde1fa452cecdda84afc93a",
+      "last_modified_on": "2026-10-05"
+    },
+    {
+      "path": "tests/test_section_overlay.py",
+      "origin": "MorphPot development 2026-10-05",
+      "sha256": "fba612daca0c8e88bdb42ea5a8a97c7b5991ff049238fdf484444ad9a8151b5c",
+      "last_modified_on": "2026-10-05"
     }
   ]
 }

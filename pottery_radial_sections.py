@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PotteryRadialSections
-Version 0.6.0
+Version 0.7.0
 
 Estimate a pottery rotation axis from a series of horizontal XY sections,
 then extract longitudinal sections through that estimated Z-parallel axis.
@@ -27,7 +27,7 @@ Important:
 - Axis fitting estimates only the XY axis position; it does NOT rotate/tilt the model.
 - A center-drift/tilt diagnostic is reported but not automatically corrected.
 - In outer mode, wall thickness is NOT used for axis estimation. It can be supplied
-  in a later wall-thickness reconstruction stage; v0.6.0 3D capacity methods require
+  in a later wall-thickness reconstruction stage; current 3D capacity methods require
   an inner surface to be present in the input mesh.
 """
 from __future__ import annotations
@@ -41,9 +41,10 @@ from pathlib import Path
 import numpy as np
 import trimesh
 import pottery_volume_core as volume_core
+from morphpot.section_overlay import export_section_overlay
 from scipy.optimize import least_squares
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 UNIT_SCALE_TO_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0}
 
@@ -1145,7 +1146,8 @@ def process(input_path: Path, unit: str, step_deg: float, start_deg: float, axis
             z_sections: int | None, z_step_mm: float | None, center_outlier_mad: float,
             contour_spacing_mm: float, sample_spacing_mm: float, output_dir: Path | None,
             make_visualization: bool, volume_modes: list[str], single_angle_deg: float,
-            volume_z_step_mm: float, min_angular_valid_fraction: float) -> dict:
+            volume_z_step_mm: float, min_angular_valid_fraction: float,
+            section_overlay: bool = True) -> dict:
     if unit not in UNIT_SCALE_TO_MM: raise ValueError(f"Unsupported unit: {unit}")
     if contour_spacing_mm<=0 or sample_spacing_mm<=0: raise ValueError("Sampling spacings must be positive.")
     if center_outlier_mad<=0: raise ValueError("--center-outlier-mad must be positive.")
@@ -1261,6 +1263,14 @@ def process(input_path: Path, unit: str, step_deg: float, start_deg: float, axis
         sampled=sample_segments(seg_half,spacing_native); color=hsv_color(j,len(ray_angles)); write_points_ply(ray_dir/f"{stem}_points.ply",sampled,color); ray_groups.append((sampled,color))
         summary_rows.append({"type":"radial_half_section","angle_deg":ray_angle,"opposite_angle_deg":"","segments":len(seg_half),"sampled_points":len(sampled)})
     write_combined_points(full_dir/"all_full_section_points.ply",full_groups); write_combined_points(ray_dir/"all_radial_half_section_points.ply",ray_groups)
+    overlay_summary = export_section_overlay(
+        output_dir, [(a, full_cache[i]) for i, a in enumerate(full_angles)],
+        center_native, scale, sample_spacing_mm, unit, enabled=section_overlay,
+    )
+    print(f"XY overlay / median: {overlay_summary['status']} "
+          f"({overlay_summary.get('valid_sections', 0)} valid full sections)")
+    if overlay_summary.get("reason"):
+        print(f"median note: {overlay_summary['reason']}")
     with (output_dir/"sections_summary.csv").open("w",newline="",encoding="utf-8-sig") as f:
         fields=["type","angle_deg","opposite_angle_deg","segments","sampled_points"]; w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(summary_rows)
 
@@ -1304,9 +1314,10 @@ def process(input_path: Path, unit: str, step_deg: float, start_deg: float, axis
         "section_ply_coordinate_system":"same XYZ coordinate system and unit as input mesh",
         "wall_thickness_used_for_axis":False,
         "outer_mode_note":"If axis_surface=outer, wall thickness is intentionally not used here; single or Z-positioned thickness measurements can be used later for inner-profile reconstruction and volume calculation.",
-        "tilt_note":"Center drift versus Z is diagnostic only; the model is not auto-rotated or tilt-corrected in v0.6.0.",
+        "tilt_note":"Center drift versus Z is diagnostic only; the model is not auto-rotated or tilt-corrected in v0.7.0.",
         "volume_reconstruction_implemented":True,
         "volume_calculation":volume_summary,
+        "section_overlay":overlay_summary,
     }
     write_json(output_dir/"metadata.json",metadata)
     print("\n=== Rotation axis ===")
@@ -1342,12 +1353,14 @@ def main():
                         help="Minimum fraction of radial directions required at a Z cell for optimized/angular modes (default: 0.75)")
     parser.add_argument("--output-dir",type=Path,help="Output directory")
     parser.add_argument("--no-visualization",action="store_true",help="Do not generate PNG reference/QC images")
+    parser.add_argument("--no-section-overlay",action="store_true",help="Disable XY section overlays and lip-registered median polyline (enabled by default)")
     parser.add_argument("--version",action="version",version=f"%(prog)s {__version__}")
     args=parser.parse_args()
     try:
         process(args.input,args.unit,args.angle_step,args.start_angle,args.axis_surface,args.z_sections,args.z_step_mm,
                 args.center_outlier_mad,args.contour_spacing_mm,args.sample_spacing_mm,args.output_dir,not args.no_visualization,
-                args.volume_mode,args.single_angle,args.volume_z_step_mm,args.min_angular_valid_fraction)
+                args.volume_mode,args.single_angle,args.volume_z_step_mm,args.min_angular_valid_fraction,
+                not args.no_section_overlay)
     except Exception as exc:
         parser.exit(1,f"ERROR: {exc}\n")
 
