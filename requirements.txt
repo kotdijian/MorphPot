@@ -1,0 +1,6 @@
+numpy>=2.0
+scipy>=1.14
+trimesh>=4.11,<6
+networkx>=3.0
+Pillow>=10
+matplotlib>=3.7
