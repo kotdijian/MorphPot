@@ -8,7 +8,7 @@
     },
     {
       "path": "DevelopmentReport.md",
-      "sha256": "daf8a6a0a7ae701e38563f73ea511fd8552b055c51fcc88a48bc4a91acf465a9",
+      "sha256": "3aac411ee9c5c848987aeefbac992e57c6de9202f304ac9e454d44c73f993fa4",
       "origin": "integration work 2026-10-05",
       "last_modified_on": "2026-10-05"
     },
@@ -24,7 +24,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "b7e0dea8d0006e1e9c63022a533172dc54fabb3ee79ecaef681b075fc6b5f645",
+      "sha256": "27fe1556c90a3b15585cc973dd1ad98c63ed4bee07f3afdd77385d88a2e2d3ba",
       "origin": "integration work 2026-10-05",
       "last_modified_on": "2026-10-05"
     },
@@ -89,15 +89,15 @@
     },
     {
       "path": "pottery_radial_sections.py",
-      "sha256": "77250a30a94b5d6f3a0ac0907024c64838d677a8e1deccde28d10d494d28966f",
+      "sha256": "6ed5ece52c05e4091ab5d3b14a06d086265dea357f1122a533c4a70801caef8f",
       "origin": "previously distributed pottery_radial_sections(5).py",
       "upstream_ref": null,
       "upstream_version": "v0.6.0",
       "upstream_sha256": "9fee2464c0acc56c49430b321e615e7f0dac5b840139f0840778ecc76b4c9554",
       "modified": true,
       "last_modified_on": "2026-10-05",
-      "local_version": "0.8.1",
-      "modification_note": "Horizontal stall/reversal stop and local ordered wall correspondence without height monotonicity"
+      "local_version": "0.8.2",
+      "modification_note": "Add source section contours and wall pair verification exports in raw and transformed XY frames"
     },
     {
       "path": "pottery_reconstruction_3d.py",
@@ -189,13 +189,13 @@
     {
       "path": "morphpot/rim_standardization.py",
       "origin": "MorphPot development 2026-10-05",
-      "sha256": "b7979d73ffa34afa599d846eb55a7075eae54dd09c88d734070ff69529939b2e",
+      "sha256": "3bd308d5bf3096f84d8fb041211082cf57197a75e3da9a632e20fe7170eeb468",
       "last_modified_on": "2026-10-05"
     },
     {
       "path": "tests/test_rim_standardization.py",
       "origin": "MorphPot development 2026-10-05",
-      "sha256": "702fb5d5c1fcbb2f40af21cb0c6f44663fe2bb50302ca3f9e4e4273f3081a82a",
+      "sha256": "593c6f056e2228fb33b6174796db56f82f8432568f125b544da94326dd599744",
       "last_modified_on": "2026-10-05"
     }
   ]

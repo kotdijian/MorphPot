@@ -111,7 +111,7 @@ def ordered_wall_pairs(outer, inner, spacing_mm):
 
 def make_midline(outer_full, inner_return, side, spacing_mm, *, smooth_mm=2.,
                  x_progress_tol=.1, buffer_mm=None, buffer_thickness_ratio=2.,
-                 end_mm=None, diagnostics=None):
+                 end_mm=None, diagnostics=None, source_geometry=None):
     if side == "right":
         outer, inner = outer_full.copy(), inner_return[::-1].copy()
     elif side == "left":
@@ -147,6 +147,8 @@ def make_midline(outer_full, inner_return, side, spacing_mm, *, smooth_mm=2.,
     midpoint[0] = outer[0]
     meta.update(wall_pairing_samples=counts,
                 local_wall_arc_lengths_mm=[float(arc_positions(p)[-1]) for p in (outer, inner)])
+    if source_geometry is not None:
+        source_geometry.update(outer=outer.copy(), inner=inner.copy(), paired_outer=a.copy(), paired_inner=b.copy())
     if diagnostics is not None:
         diagnostics.update(meta)
     return midpoint, thickness
@@ -255,19 +257,32 @@ def unit_shape(points):
     return (points - center) / size, center, size
 
 
-def _write_curves(path, curves, unit_to_mm):
+def _write_curves(path, curves, unit_to_mm, color=None):
     with Path(path).open("w", encoding="ascii", newline="\n") as f:
         n = sum(len(p) for p in curves)
         e = sum(len(p) - 1 for p in curves)
-        f.write(f"ply\nformat ascii 1.0\nelement vertex {n}\nproperty double x\nproperty double y\nproperty double z\nelement edge {e}\nproperty int vertex1\nproperty int vertex2\nend_header\n")
+        colors = "property uchar red\nproperty uchar green\nproperty uchar blue\n" if color is not None else ""
+        f.write(f"ply\nformat ascii 1.0\nelement vertex {n}\nproperty double x\nproperty double y\nproperty double z\n{colors}element edge {e}\nproperty int vertex1\nproperty int vertex2\nend_header\n")
         for p in curves:
             for x, y in p / unit_to_mm:
-                f.write(f"{x:.15g} {y:.15g} 0\n")
+                rgb = " " + " ".join(map(str, color)) if color is not None else ""
+                f.write(f"{x:.15g} {y:.15g} 0{rgb}\n")
         offset = 0
         for p in curves:
             for i in range(len(p) - 1):
                 f.write(f"{offset+i} {offset+i+1}\n")
             offset += len(p)
+
+
+def _write_verification(out, prefix, geometry, pairs, unit_to_mm):
+    # Source polylines retain the original section vertices (plus prefix endpoint).
+    # They include the local detection margin; connectors show the exact compared pairs.
+    for key, color in (("outer", (230, 70, 50)), ("inner", (50, 100, 230))):
+        _write_curves(out / f"{prefix}_source_{key}_xy.ply",
+                      [g[key] for g in geometry], unit_to_mm, color)
+    connectors = [np.vstack((a, b)) for pair in pairs for a, b in zip(*pair)]
+    _write_curves(out / f"{prefix}_pair_connectors_xy.ply", connectors,
+                  unit_to_mm, (170, 170, 170))
 
 
 def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, input_unit,
@@ -280,6 +295,9 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
     known = ["raw_midlines_xy.ply", "raw_midlines.csv", "transforms.json"]
     for mode in ("similarity", "affine"):
         known += [f"{mode}_midlines_xy.ply", f"standard_{mode}_midline_xy.ply", f"standard_{mode}_midline.csv", f"standard_{mode}_unit_shape.csv"]
+    for prefix in ("raw", "similarity", "affine"):
+        known += [f"{prefix}_source_outer_xy.ply", f"{prefix}_source_inner_xy.ply", f"{prefix}_pair_connectors_xy.ply"]
+    known += ["raw_paired_points.csv"]
     for name in known:
         (out / name).unlink(missing_ok=True)
     config = dict(spacing_mm=spacing_mm, smooth_mm=smooth_mm, turn_angle_deg=turn_angle_deg,
@@ -308,7 +326,7 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
             raise ValueError("rim buffer must be finite and non-negative")
         if end_mm is not None and (not np.isfinite(end_mm) or end_mm <= 0):
             raise ValueError("manual rim end must be finite and positive")
-        accepted, records = [], []
+        accepted, records, source_geometries, source_pairs = [], [], [], []
         for angle, segments in sections:
             try:
                 outer, inner = registered_branches(project_section(segments, center_xy, angle) * unit_to_mm)
@@ -318,13 +336,23 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
             for side in ("right", "left"):
                 record = {"angle_deg": float(angle), "side": side}
                 try:
+                    geometry = {}
                     midline, thickness = make_midline(outer, inner, side, spacing_mm,
                         smooth_mm=smooth_mm, x_progress_tol=x_progress_tol, buffer_mm=buffer_mm,
-                        buffer_thickness_ratio=buffer_thickness_ratio, end_mm=end_mm, diagnostics=record)
+                        buffer_thickness_ratio=buffer_thickness_ratio, end_mm=end_mm, diagnostics=record, source_geometry=geometry)
                     crop, meta = crop_rim(midline, thickness, spacing_mm=spacing_mm, smooth_mm=smooth_mm,
                                           x_progress_tol=x_progress_tol, buffer_mm=buffer_mm,
                                           buffer_thickness_ratio=buffer_thickness_ratio, end_mm=end_mm)
-                    sample = sample_curve(crop, np.linspace(0, arc_positions(crop)[-1], points))
+                    # Use one interpolation parameter for both walls and their midpoint.
+                    positions = np.linspace(0, meta["end_arc_length_mm"], points)
+                    arc = arc_positions(midline)
+                    keep = np.r_[True, np.diff(arc) > 1e-10]
+                    pair = [np.column_stack([np.interp(positions, arc[keep], wall[keep, k])
+                                             for k in range(2)])
+                            for wall in (geometry["paired_outer"], geometry["paired_inner"])]
+                    sample = (pair[0] + pair[1]) / 2
+                    source_geometries.append(geometry)
+                    source_pairs.append(pair)
                     accepted.append(sample)
                     record.update(status="ok", **meta)
                     records.append(record)
@@ -333,7 +361,18 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
                 qa["profiles"].append(record)
         qa.update(valid_profiles=len(accepted), attempted_profiles=2 * len(sections))
         if accepted:
-            _write_curves(out / "raw_midlines_xy.ply", accepted, unit_to_mm)
+            _write_curves(out / "raw_midlines_xy.ply", accepted, unit_to_mm, (40, 190, 70))
+            _write_verification(out, "raw", source_geometries, source_pairs, unit_to_mm)
+            qa["verification"] = {"source_scope": "original local wall prefixes including detection margin",
+                "colors": {"outer": "red", "inner": "blue", "midline": "green", "pairs": "gray"},
+                "pair_points_per_profile": points, "coordinates": "same XY frame and input unit as midlines"}
+            with (out / "raw_paired_points.csv").open("w", encoding="utf-8-sig", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["profile_id", "angle_deg", "side", "point_id", "u",
+                                 "outer_x_mm", "outer_y_mm", "inner_x_mm", "inner_y_mm", "mid_x_mm", "mid_y_mm"])
+                for i, (pair, curve, rec) in enumerate(zip(source_pairs, accepted, records)):
+                    for j, (a, b, mid) in enumerate(zip(*pair, curve)):
+                        writer.writerow([i, rec["angle_deg"], rec["side"], j, j/(points-1), *a, *b, *mid])
             with (out / "raw_midlines.csv").open("w", encoding="utf-8-sig", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(["profile_id", "angle_deg", "side", "point_id", "u", "x_input", "y_input", "x_mm", "y_mm"])
@@ -348,7 +387,7 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
             weights[[0, -1]] = endpoint_weight
             transforms = []
             for mode in ("similarity", "affine"):
-                aligned = []
+                aligned, mapped_geometry, mapped_pairs = [], [], []
                 for index, source in enumerate(accepted):
                     if mode == "similarity":
                         matrix, trans = fit_similarity(source, reference, weights)
@@ -361,6 +400,9 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
                         detail.update(status="similarity_fallback", reason="affine optimizer failed")
                     mapped = apply_transform(source, matrix, trans)
                     aligned.append(mapped)
+                    mapped_geometry.append({key: apply_transform(source_geometries[index][key], matrix, trans)
+                                            for key in ("outer", "inner")})
+                    mapped_pairs.append([apply_transform(p, matrix, trans) for p in source_pairs[index]])
                     transforms.append({"profile_id": index, "mode": mode, "angle_deg": records[index]["angle_deg"],
                                        "side": records[index]["side"], "matrix_2x2": matrix.tolist(),
                                        "translation_mm": trans.tolist(), "determinant": float(np.linalg.det(matrix)),
@@ -370,7 +412,8 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
                 standard = np.median(np.stack(aligned), axis=0)
                 deviation = np.sqrt(np.mean(np.sum((np.stack(aligned) - standard) ** 2, axis=2), axis=0))
                 shape, centroid, size = unit_shape(standard)
-                _write_curves(out / f"{mode}_midlines_xy.ply", aligned, unit_to_mm)
+                _write_curves(out / f"{mode}_midlines_xy.ply", aligned, unit_to_mm, (40, 190, 70))
+                _write_verification(out, mode, mapped_geometry, mapped_pairs, unit_to_mm)
                 write_polyline_ply(out / f"standard_{mode}_midline_xy.ply", np.column_stack([standard / unit_to_mm, np.zeros(points)]), closed=False)
                 with (out / f"standard_{mode}_midline.csv").open("w", encoding="utf-8-sig", newline="") as f:
                     writer = csv.writer(f)

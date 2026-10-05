@@ -190,3 +190,41 @@ def test_nonmonotone_lower_body_does_not_change_local_rim():
     a = sample_curve(m1, np.linspace(0, 14, 29))
     b = sample_curve(m2, np.linspace(0, 14, 29))
     np.testing.assert_allclose(a, b, atol=.2)
+
+
+def _ply_vertices_edges(path):
+    lines = path.read_text().splitlines()
+    nv = int(next(s for s in lines if s.startswith('element vertex ')).split()[-1])
+    ne = int(next(s for s in lines if s.startswith('element edge ')).split()[-1])
+    start = lines.index('end_header') + 1
+    return (np.array([[float(v) for v in s.split()] for s in lines[start:start+nv]]),
+            np.array([[int(v) for v in s.split()] for s in lines[start+nv:start+nv+ne]]))
+
+
+@pytest.mark.parametrize('scale', [1, 10, 1000])
+def test_verification_pairs_are_midpoints_before_and_after_fitting(tmp_path, scale):
+    qa = export_rim_standardization(tmp_path, [(a, source_segments(a, scale)) for a in [0, 90]],
+        (3/scale, -4/scale), scale, 'test', smooth_mm=1, buffer_mm=3, points=33)
+    assert qa['status'] == 'ok'
+    out = tmp_path / 'rim_standardization'
+    for prefix in ['raw', 'similarity', 'affine']:
+        mid, _ = _ply_vertices_edges(out / f'{prefix}_midlines_xy.ply')
+        pairs, edges = _ply_vertices_edges(out / f'{prefix}_pair_connectors_xy.ply')
+        np.testing.assert_allclose((pairs[::2,:3]+pairs[1::2,:3])/2, mid[:,:3], atol=1e-12)
+        np.testing.assert_array_equal(edges, np.arange(len(pairs)).reshape(-1,2))
+        assert len(edges) == 4*33
+        np.testing.assert_array_equal(mid[:,3:], np.tile([40,190,70], (len(mid),1)))
+        for key in ['outer', 'inner']:
+            source, source_edges = _ply_vertices_edges(out / f'{prefix}_source_{key}_xy.ply')
+            assert len(source_edges) == len(source)-4
+            assert np.all(source[:,2] == 0)
+    with (out / 'raw_paired_points.csv').open(encoding='utf-8-sig') as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 4*33
+    for row in rows:
+        for axis in ['x','y']:
+            assert float(row[f'mid_{axis}_mm']) == pytest.approx(
+                (float(row[f'outer_{axis}_mm'])+float(row[f'inner_{axis}_mm']))/2)
+    export_rim_standardization(tmp_path, [], (0,0), scale, 'test', enabled=False)
+    assert not list(out.glob('*source*'))
+    assert not list(out.glob('*pair*'))
