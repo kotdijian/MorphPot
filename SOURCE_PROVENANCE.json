@@ -8,7 +8,7 @@
     },
     {
       "path": "DevelopmentReport.md",
-      "sha256": "5d1614198a33aa3e0a83603b336b595eb1f381bdcec7082d63222afa89589f22",
+      "sha256": "58ca4d077d30f2135caf4c2be1ea6e7f4bae922619dea0f3cd0aa964ebb88fb0",
       "origin": "integration work 2026-10-05",
       "last_modified_on": "2026-10-05"
     },
@@ -24,7 +24,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "089c8262984242f36aab9cbcbf251ded8273cb08228f6cd51912b623a44e31e1",
+      "sha256": "d45257638041fb314fbde90ad55851d4561c27aa2c87a2dbd9fd69788147a157",
       "origin": "integration work 2026-10-05",
       "last_modified_on": "2026-10-05"
     },
@@ -89,15 +89,15 @@
     },
     {
       "path": "pottery_radial_sections.py",
-      "sha256": "4562650fd2f1bc602b9358fc73cc40d9cf41afa34d995d2047121f276b202b3f",
+      "sha256": "5f8f04e180bb14cd764b943999954508fb5ecc6342dc264bc532bc422f3c3053",
       "origin": "previously distributed pottery_radial_sections(5).py",
       "upstream_ref": null,
       "upstream_version": "v0.6.0",
       "upstream_sha256": "9fee2464c0acc56c49430b321e615e7f0dac5b840139f0840778ecc76b4c9554",
       "modified": true,
       "last_modified_on": "2026-10-05",
-      "local_version": "0.9.0",
-      "modification_note": "Centreline-extension lip endpoint and all/inliers/exploratory A/B standard section models from transformed original wall distances"
+      "local_version": "0.10.0",
+      "modification_note": "Neutral geometric endpoint modes and vessel-wide shape candidate screening; separate standard_similarity and standard_affine output folders"
     },
     {
       "path": "pottery_reconstruction_3d.py",
@@ -189,13 +189,13 @@
     {
       "path": "morphpot/rim_standardization.py",
       "origin": "MorphPot development 2026-10-05",
-      "sha256": "0c1233385df80394d81713284d09fb1aa683044c5d0073e7cab54e02bce25c66",
+      "sha256": "494e26f9391332c0464a80a60a60230539014afa35f8fb40615353446a347ce8",
       "last_modified_on": "2026-10-05"
     },
     {
       "path": "tests/test_rim_standardization.py",
       "origin": "MorphPot development 2026-10-05",
-      "sha256": "79579f51bba0d877c3d28e0fba2144f7d8765ae11c0e2bcaab7a22dcc5a4a77b",
+      "sha256": "da1bc0f2fd0a865e06c416c47a4087885161571384c5f24650ca34b975b630e0",
       "last_modified_on": "2026-10-05"
     },
     {
@@ -214,7 +214,19 @@
       "path": "tests/test_rim_models.py",
       "origin": "MorphPot development 2026-10-05",
       "last_modified_on": "2026-10-05",
-      "sha256": "1f6f54ace3a9b929f598fd01a2cff75083ba88fe42fbde6ce8794173ca148461"
+      "sha256": "e950b7454144ddf474d445f3ee0d765a797d29a9aa0faf67786e0667135640b2"
+    },
+    {
+      "path": "morphpot/rim_endpoint.py",
+      "origin": "MorphPot development 2026-10-05",
+      "last_modified_on": "2026-10-05",
+      "sha256": "94f840bea5b6b39b02cb74d74bbb30afd7b9a6f42c3f6a330d3e32970d2486fb"
+    },
+    {
+      "path": "tests/test_rim_endpoint.py",
+      "origin": "MorphPot development 2026-10-05",
+      "last_modified_on": "2026-10-05",
+      "sha256": "c615ceea2196b961148eb65e4219ff5ddd5b7b121aaa1b57718bad87ff28d9ec"
     }
   ]
 }

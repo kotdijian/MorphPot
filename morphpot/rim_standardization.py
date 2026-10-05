@@ -15,6 +15,7 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import least_squares
 
 from .section_overlay import project_section, registered_branches, write_polyline_ply
+from .rim_endpoint import detect_candidates, select_candidate, shape_summary, write_endpoint_products, END_MODES
 from .rim_tip import extension_tip
 from .rim_models import export_section_models, model_product_names
 
@@ -111,22 +112,51 @@ def ordered_wall_pairs(outer, inner, spacing_mm):
     return a[pairs[:, 0]], b[pairs[:, 1]], counts
 
 
-def make_midline(outer_full, inner_return, side, spacing_mm, *, smooth_mm=2.,
-                 x_progress_tol=.1, buffer_mm=None, buffer_thickness_ratio=2.,
-                 end_mm=None, diagnostics=None, source_geometry=None):
+def describe_walls(outer_full, inner_return, side, spacing_mm, smooth_mm, x_progress_tol, horizontal_angle_deg):
     if side == "right":
-        outer, inner = outer_full.copy(), inner_return[::-1].copy()
+        outer, inner = outer_full[:, :2].copy(), inner_return[::-1, :2].copy()
     elif side == "left":
-        outer, inner = outer_full[::-1].copy(), inner_return.copy()
+        outer, inner = outer_full[::-1, :2].copy(), inner_return[:, :2].copy()
         outer[:, 0] *= -1
         inner[:, 0] *= -1
     else:
         raise ValueError("side must be right or left")
-    outer, inner = side_to_axis(outer[:, :2]), side_to_axis(inner[:, :2])
+    outer, inner = side_to_axis(outer), side_to_axis(inner)
+    detection = [detect_candidates(p, spacing_mm, smooth_mm, x_progress_tol, horizontal_angle_deg)
+                 for p in (outer, inner)]
+    candidates = []
+    for kind in ("radial_turn", "horizontal_transition"):
+        found = [next((c for c in d["candidates"] if c["kind"] == kind), None) for d in detection]
+        if all(c is not None for c in found):
+            candidates.append(dict(kind=kind, label=found[0]["label"],
+                arc_length_mm=float(np.mean([c["arc_length_mm"] for c in found])),
+                point_mm=np.mean([c["point_mm"] for c in found], axis=0).tolist(), wall_support=2))
+    categories = [c["kind"] for c in candidates]
+    if len(categories) > 1:
+        categories.append("compound")
+    if all("near_vertical" in d["categories"] for d in detection):
+        categories.append("near_vertical")
+    if not categories:
+        categories = ["undetermined" if any(d["status"] != "ok" or d["candidates"] for d in detection) else "no_clear_transition"]
+    return outer, inner, detection, dict(candidates=candidates, categories=categories,
+        status="ok", source="agreement of outer/inner local wall screening", wall_details=detection)
+
+
+def make_midline(outer_full, inner_return, side, spacing_mm, *, smooth_mm=2.,
+                 x_progress_tol=.1, buffer_mm=None, buffer_thickness_ratio=2.,
+                 end_mm=None, diagnostics=None, source_geometry=None, end_mode="auto", horizontal_angle_deg=10.):
+    outer, inner, detection, description = describe_walls(outer_full, inner_return, side,
+        spacing_mm, smooth_mm, x_progress_tol, horizontal_angle_deg)
+    if diagnostics is not None:
+        diagnostics["shape_detection"] = description
     meta = {"wall_pairing": "local order-preserving DTW; 25% band; at most 512 samples per wall"}
     if end_mm is None:
-        so, po, _ = horizontal_stop(outer, spacing_mm, smooth_mm, x_progress_tol)
-        si, pi, _ = horizontal_stop(inner, spacing_mm, smooth_mm, x_progress_tol)
+        choice = select_candidate(description, end_mode)
+        chosen_kind = choice["kind"]
+        co, ci = [select_candidate(d, chosen_kind) for d in detection]
+        so, si = co["arc_length_mm"], ci["arc_length_mm"]
+        po, pi = np.array(co["point_mm"]), np.array(ci["point_mm"])
+        meta["preselection_kind"] = chosen_kind
         separation = float(np.linalg.norm(po - pi))
         if separation <= 1e-8 and buffer_mm is None:
             raise ValueError("zero wall separation at transition")
@@ -159,7 +189,8 @@ def make_midline(outer_full, inner_return, side, spacing_mm, *, smooth_mm=2.,
 
 
 def crop_rim(midline, thickness, *, spacing_mm=.5, smooth_mm=2.,
-             turn_angle_deg=None, x_progress_tol=.1, buffer_mm=None, buffer_thickness_ratio=2., end_mm=None):
+             turn_angle_deg=None, x_progress_tol=.1, buffer_mm=None, buffer_thickness_ratio=2., end_mm=None,
+             end_mode="auto", horizontal_angle_deg=10.):
     s = arc_positions(midline)
     grid = np.linspace(0, s[-1], max(8, int(np.ceil(s[-1] / spacing_mm)) + 1))
     line = sample_curve(midline, grid)
@@ -172,13 +203,16 @@ def crop_rim(midline, thickness, *, spacing_mm=.5, smooth_mm=2.,
     else:
         if turn_angle_deg is not None:
             x_progress_tol = float(np.sin(np.deg2rad(turn_angle_deg)))
-        change_s, change_point, progress = horizontal_stop(midline, spacing_mm, smooth_mm, x_progress_tol)
+        detection = detect_candidates(midline, spacing_mm, smooth_mm, x_progress_tol, horizontal_angle_deg)
+        chosen = select_candidate(detection, end_mode)
+        change_s, change_point, progress = chosen["arc_length_mm"], np.array(chosen["point_mm"]), chosen["tangent_radial"]
         local_thickness = float(np.interp(change_s, s, thickness))
         buffer = float(buffer_mm if buffer_mm is not None else local_thickness * buffer_thickness_ratio)
         end = float(change_s + buffer)
         if end > s[-1]:
             raise ValueError("insufficient midline beyond the transition for the requested buffer")
-        meta.update(selection="horizontal_stall_or_reversal", change_arc_length_mm=change_s,
+        meta.update(selection="horizontal_stall_or_reversal" if chosen["kind"] == "radial_turn" else "height_change_to_horizontal",
+                    endpoint_kind=chosen["kind"], midline_endpoint_candidates=detection["candidates"], change_arc_length_mm=change_s,
                     change_point_mm=change_point.tolist(), x_progress_at_change=progress,
                     local_paired_wall_separation_mm=local_thickness, buffer_mm=buffer)
     positions = np.r_[grid[grid < end], end]
@@ -295,11 +329,13 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
                                *, enabled=True, spacing_mm=.5, smooth_mm=2., turn_angle_deg=None, x_progress_tol=.1,
                                buffer_mm=None, buffer_thickness_ratio=2., end_mm=None, points=129,
                                endpoint_weight=5., affine_anisotropy=.1, affine_shear=.1, affine_penalty=1.,
-                               outlier_mad=3.5, bimodal=True, bimodal_min_profiles=20, bimodal_bic_delta=10.):
+                               outlier_mad=3.5, bimodal=True, bimodal_min_profiles=20, bimodal_bic_delta=10.,
+                               end_mode="auto", horizontal_angle_deg=10.):
     out = Path(output_dir) / "rim_standardization"
     out.mkdir(parents=True, exist_ok=True)
     # Only delete files owned by this exporter. There are no user-provided profiles here.
-    known = ["raw_midlines_xy.ply", "raw_midlines.csv", "transforms.json"]
+    known = ["raw_midlines_xy.ply", "raw_midlines.csv", "transforms.json", "shape_candidates.json",
+             "endpoint_candidates.csv", "endpoint_candidates_xy.ply"]
     for mode in ("similarity", "affine"):
         known += model_product_names(mode)
         known += [f"{mode}_midlines_xy.ply", f"standard_{mode}_midline_xy.ply", f"standard_{mode}_midline.csv", f"standard_{mode}_unit_shape.csv"]
@@ -307,20 +343,26 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
         known += [f"{prefix}_source_outer_xy.ply", f"{prefix}_source_inner_xy.ply", f"{prefix}_pair_connectors_xy.ply", f"{prefix}_tip_extensions_xy.ply"]
     known += ["raw_paired_points.csv"]
     for name in known:
-        (out / name).unlink(missing_ok=True)
+        (out / name).unlink(missing_ok=True)  # remove legacy flat output as well
+        for mode in ("similarity", "affine"):
+            (out / f"standard_{mode}" / name).unlink(missing_ok=True)
     config = dict(spacing_mm=spacing_mm, smooth_mm=smooth_mm, turn_angle_deg=turn_angle_deg,
                   x_progress_tol=x_progress_tol,
                   buffer_mm=buffer_mm, buffer_thickness_ratio=buffer_thickness_ratio,
                   end_mm=end_mm, points=points, endpoint_weight=endpoint_weight,
                   affine_anisotropy=affine_anisotropy, affine_shear=affine_shear, affine_penalty=affine_penalty,
                   outlier_mad=outlier_mad, bimodal=bimodal, bimodal_min_profiles=bimodal_min_profiles,
-                  bimodal_bic_delta=bimodal_bic_delta)
+                  bimodal_bic_delta=bimodal_bic_delta, end_mode=end_mode, horizontal_angle_deg=horizontal_angle_deg)
     qa = {"enabled": enabled, "status": "disabled", "config": config, "input_unit": input_unit,
           "unit_to_mm": unit_to_mm, "profiles": [], "side_reference": "right; left reflected before fitting",
           "midline_definition": "midpoints of local order-preserving outer/inner wall pairs; no height monotonicity requirement",
           "xy_frame": "X=right-oriented radius, Y=original input Z, Z=0",
           "interpretation": "within-vessel standardization; not recovery of the unfired form or a completed between-vessel Procrustes analysis"}
     if enabled:
+        if end_mode not in END_MODES or not np.isfinite(horizontal_angle_deg) or not 0 < horizontal_angle_deg < 35:
+            raise ValueError("invalid end mode or horizontal angle (must be in (0,35) degrees)")
+        if end_mode == "manual" and end_mm is None:
+            raise ValueError("manual end mode requires --rim-end-mm")
         positive = [spacing_mm, smooth_mm, buffer_thickness_ratio, endpoint_weight,
                     affine_anisotropy, affine_shear, affine_penalty, outlier_mad, bimodal_bic_delta]
         if any(not np.isfinite(v) or v <= 0 for v in positive) or points < 8:
@@ -339,6 +381,7 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
         if end_mm is not None and (not np.isfinite(end_mm) or end_mm <= 0):
             raise ValueError("manual rim end must be finite and positive")
         accepted, records, source_geometries, source_pairs = [], [], [], []
+        prepared = []
         for angle, segments in sections:
             try:
                 outer, inner = registered_branches(project_section(segments, center_xy, angle) * unit_to_mm)
@@ -348,29 +391,49 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
             for side in ("right", "left"):
                 record = {"angle_deg": float(angle), "side": side}
                 try:
-                    geometry = {}
-                    midline, thickness = make_midline(outer, inner, side, spacing_mm,
-                        smooth_mm=smooth_mm, x_progress_tol=x_progress_tol, buffer_mm=buffer_mm,
-                        buffer_thickness_ratio=buffer_thickness_ratio, end_mm=end_mm, diagnostics=record, source_geometry=geometry)
-                    crop, meta = crop_rim(midline, thickness, spacing_mm=spacing_mm, smooth_mm=smooth_mm,
-                                          x_progress_tol=x_progress_tol, buffer_mm=buffer_mm,
-                                          buffer_thickness_ratio=buffer_thickness_ratio, end_mm=end_mm)
-                    # Use one interpolation parameter for both walls and their midpoint.
-                    positions = np.linspace(0, meta["end_arc_length_mm"], points)
-                    arc = arc_positions(midline)
-                    keep = np.r_[True, np.diff(arc) > 1e-10]
-                    pair = [np.column_stack([np.interp(positions, arc[keep], wall[keep, k])
-                                             for k in range(2)])
-                            for wall in (geometry["paired_outer"], geometry["paired_inner"])]
-                    sample = (pair[0] + pair[1]) / 2
-                    source_geometries.append(geometry)
-                    source_pairs.append(pair)
-                    accepted.append(sample)
-                    record.update(status="ok", **meta)
-                    records.append(record)
+                    _, _, _, description = describe_walls(outer, inner, side, spacing_mm, smooth_mm,
+                                                          x_progress_tol, horizontal_angle_deg)
+                    record["shape_detection"] = description
+                    prepared.append((outer, inner, side, record))
                 except (ValueError, IndexError) as exc:
                     record.update(status="excluded", reason=str(exc))
                 qa["profiles"].append(record)
+        summary = shape_summary(qa["profiles"])
+        # A single vessel-wide mode avoids aligning different endpoint meanings.
+        effective_mode = summary["recommended_end_mode"] if end_mode == "auto" else end_mode
+        if end_mm is not None:
+            effective_mode = "manual"
+        summary.update(requested_end_mode=end_mode, effective_end_mode=effective_mode,
+                       manual_arc_override=end_mm is not None)
+        qa["shape_candidates"] = summary
+        (out/"shape_candidates.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        for outer, inner, side, record in prepared:
+            try:
+                if effective_mode is None:
+                    raise ValueError("no vessel-wide supported endpoint mode; specify --rim-end-mm manually")
+                geometry = {}
+                midline, thickness = make_midline(outer, inner, side, spacing_mm,
+                    smooth_mm=smooth_mm, x_progress_tol=x_progress_tol, buffer_mm=buffer_mm,
+                    buffer_thickness_ratio=buffer_thickness_ratio, end_mm=end_mm, diagnostics=record,
+                    source_geometry=geometry, end_mode=effective_mode, horizontal_angle_deg=horizontal_angle_deg)
+                crop, meta = crop_rim(midline, thickness, spacing_mm=spacing_mm, smooth_mm=smooth_mm,
+                    x_progress_tol=x_progress_tol, buffer_mm=buffer_mm,
+                    buffer_thickness_ratio=buffer_thickness_ratio, end_mm=end_mm,
+                    end_mode=record.get("preselection_kind", effective_mode), horizontal_angle_deg=horizontal_angle_deg)
+                positions = np.linspace(0, meta["end_arc_length_mm"], points)
+                arc = arc_positions(midline)
+                keep = np.r_[True, np.diff(arc) > 1e-10]
+                pair = [np.column_stack([np.interp(positions, arc[keep], wall[keep, k]) for k in range(2)])
+                        for wall in (geometry["paired_outer"], geometry["paired_inner"])]
+                sample = (pair[0] + pair[1]) / 2
+                source_geometries.append(geometry)
+                source_pairs.append(pair)
+                record.update(status="ok", accepted_profile_id=len(accepted), **meta)
+                accepted.append(sample)
+                records.append(record)
+            except (ValueError, IndexError) as exc:
+                record.update(status="excluded", reason=str(exc))
+        write_endpoint_products(out, qa["profiles"], unit_to_mm)
         qa.update(valid_profiles=len(accepted), attempted_profiles=2 * len(sections))
         if accepted:
             _write_curves(out / "raw_midlines_xy.ply", accepted, unit_to_mm, (40, 190, 70))
@@ -399,6 +462,8 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
             weights[[0, -1]] = endpoint_weight
             transforms = []
             for mode in ("similarity", "affine"):
+                mode_out = out / f"standard_{mode}"
+                mode_out.mkdir(exist_ok=True)
                 aligned, mapped_geometry, mapped_pairs = [], [], []
                 for index, source in enumerate(accepted):
                     if mode == "similarity":
@@ -424,25 +489,27 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
                 standard = np.median(np.stack(aligned), axis=0)
                 deviation = np.sqrt(np.mean(np.sum((np.stack(aligned) - standard) ** 2, axis=2), axis=0))
                 shape, centroid, size = unit_shape(standard)
-                _write_curves(out / f"{mode}_midlines_xy.ply", aligned, unit_to_mm, (40, 190, 70))
-                _write_verification(out, mode, mapped_geometry, mapped_pairs, unit_to_mm)
-                write_polyline_ply(out / f"standard_{mode}_midline_xy.ply", np.column_stack([standard / unit_to_mm, np.zeros(points)]), closed=False)
-                with (out / f"standard_{mode}_midline.csv").open("w", encoding="utf-8-sig", newline="") as f:
+                _write_curves(mode_out / f"{mode}_midlines_xy.ply", aligned, unit_to_mm, (40, 190, 70))
+                _write_verification(mode_out, mode, mapped_geometry, mapped_pairs, unit_to_mm)
+                write_polyline_ply(mode_out / f"standard_{mode}_midline_xy.ply", np.column_stack([standard / unit_to_mm, np.zeros(points)]), closed=False)
+                with (mode_out / f"standard_{mode}_midline.csv").open("w", encoding="utf-8-sig", newline="") as f:
                     writer = csv.writer(f)
                     writer.writerow(["point_id", "u", "x_input", "y_input", "x_mm", "y_mm", "rms_deviation_mm"])
                     for j, p in enumerate(standard):
                         writer.writerow([j, j / (points - 1), *(p / unit_to_mm), *p, deviation[j]])
-                with (out / f"standard_{mode}_unit_shape.csv").open("w", encoding="utf-8-sig", newline="") as f:
+                with (mode_out / f"standard_{mode}_unit_shape.csv").open("w", encoding="utf-8-sig", newline="") as f:
                     writer = csv.writer(f)
                     writer.writerow(["point_id", "u", "x_unitless", "y_unitless"])
                     for j, p in enumerate(shape):
                         writer.writerow([j, j / (points - 1), *p])
-                qa[mode] = {"centroid_mm": centroid.tolist(), "centroid_size_mm": size,
+                qa[mode] = {"output_subdir": f"standard_{mode}", "centroid_mm": centroid.tolist(), "centroid_size_mm": size,
                             "reference": "fixed coordinate-wise median of accepted right-side cropped midlines",
                             "rms_deviation_mm": float(np.sqrt(np.mean(deviation ** 2)))}
-                qa[mode]["section_models"] = export_section_models(out, mode, aligned, mapped_pairs,
+                qa[mode]["section_models"] = export_section_models(mode_out, mode, aligned, mapped_pairs,
                     records, unit_to_mm, _write_curves, geometries=mapped_geometry, outlier_mad=outlier_mad, bimodal=bimodal,
                     bimodal_min_profiles=bimodal_min_profiles, bimodal_bic_delta=bimodal_bic_delta)
+                mode_transforms = [t for t in transforms if t["mode"] == mode]
+                (mode_out / "transforms.json").write_text(json.dumps(mode_transforms, ensure_ascii=False, indent=2), encoding="utf-8")
             (out / "transforms.json").write_text(json.dumps(transforms, ensure_ascii=False, indent=2), encoding="utf-8")
             qa["status"] = "ok"
         else:

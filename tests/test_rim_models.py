@@ -158,7 +158,7 @@ def test_model_cleanup_and_invalid_config(tmp_path):
     assert qa['status'] == 'ok'
     out = tmp_path/'rim_standardization'
     # Simulate a previous successful A/B run; removal is limited to owned names.
-    (out/'standard_affine_section_A_xy.ply').write_text('stale')
+    (out/'standard_affine'/'standard_affine_section_A_xy.ply').write_text('stale')
     (out/'user_notes.txt').write_text('keep')
     export_rim_standardization(*args,enabled=False)
     assert not list(out.glob('*section*'))

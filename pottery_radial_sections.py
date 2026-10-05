@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PotteryRadialSections
-Version 0.9.0
+Version 0.10.0
 
 Estimate a pottery rotation axis from a series of horizontal XY sections,
 then extract longitudinal sections through that estimated Z-parallel axis.
@@ -45,7 +45,7 @@ from morphpot.section_overlay import export_section_overlay
 from morphpot.rim_standardization import export_rim_standardization
 from scipy.optimize import least_squares
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 UNIT_SCALE_TO_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0}
 
@@ -1321,7 +1321,7 @@ def process(input_path: Path, unit: str, step_deg: float, start_deg: float, axis
         "section_ply_coordinate_system":"same XYZ coordinate system and unit as input mesh",
         "wall_thickness_used_for_axis":False,
         "outer_mode_note":"If axis_surface=outer, wall thickness is intentionally not used here; single or Z-positioned thickness measurements can be used later for inner-profile reconstruction and volume calculation.",
-        "tilt_note":"Center drift versus Z is diagnostic only; the model is not auto-rotated or tilt-corrected in v0.9.0.",
+        "tilt_note":"Center drift versus Z is diagnostic only; the model is not auto-rotated or tilt-corrected in v0.10.0.",
         "volume_reconstruction_implemented":True,
         "volume_calculation":volume_summary,
         "section_overlay":overlay_summary,
@@ -1363,6 +1363,8 @@ def main():
     parser.add_argument("--no-visualization",action="store_true",help="Do not generate PNG reference/QC images")
     parser.add_argument("--no-section-overlay",action="store_true",help="Disable XY section overlays and lip-registered median polyline (enabled by default)")
     parser.add_argument("--no-rim-standardization",action="store_true",help="Disable cropped right-oriented rim midlines and within-vessel registration")
+    parser.add_argument("--rim-end-mode",choices=["auto","radial_turn","horizontal_transition","manual"],default="auto",help="Neutral endpoint policy; auto estimates one vessel-wide policy from both wall branches (default: auto)")
+    parser.add_argument("--rim-horizontal-angle-deg",type=float,default=10.,help="Horizontal-transition inclination threshold [deg]; prior oblique threshold is this value +10 (default: 10)")
     parser.add_argument("--rim-buffer-mm",type=float,help="Arc-length buffer past the horizontal stall/reversal [mm]; default: 2x local paired wall separation")
     parser.add_argument("--rim-buffer-thickness-ratio",type=float,default=2.0,help="Automatic buffer as a multiple of local paired wall separation (default: 2)")
     parser.add_argument("--rim-end-mm",type=float,help="Manually select an arc-length endpoint from the lip [mm], replacing transition+buffer detection")
@@ -1386,6 +1388,7 @@ def main():
                 args.volume_mode,args.single_angle,args.volume_z_step_mm,args.min_angular_valid_fraction,
                 not args.no_section_overlay,
                 {"enabled": not args.no_rim_standardization,
+                 "end_mode": args.rim_end_mode, "horizontal_angle_deg": args.rim_horizontal_angle_deg,
                  "buffer_mm": args.rim_buffer_mm, "buffer_thickness_ratio": args.rim_buffer_thickness_ratio,
                  "end_mm": args.rim_end_mm, "smooth_mm": args.rim_smooth_mm,
                  "turn_angle_deg": args.rim_turn_angle_deg, "points": args.rim_points,

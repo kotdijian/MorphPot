@@ -128,10 +128,10 @@ def test_export_records_sides_units_and_open_standard_curve(tmp_path, unit, scal
     assert qa["status"] == "ok"
     assert qa["valid_profiles"] == 6
     out = tmp_path / "rim_standardization"
-    lines = (out / "standard_affine_midline_xy.ply").read_text().splitlines()
+    lines = (out / "standard_affine" / "standard_affine_midline_xy.ply").read_text().splitlines()
     assert "element vertex 33" in lines
     assert "element edge 32" in lines  # open rim curve, no artificial closing edge
-    with (out / "standard_similarity_midline.csv").open(encoding="utf-8-sig") as f:
+    with (out / "standard_similarity" / "standard_similarity_midline.csv").open(encoding="utf-8-sig") as f:
         first = next(csv.DictReader(f))
     assert float(first["x_input"]) * scale == pytest.approx(float(first["x_mm"]))
     assert float(first["x_mm"]) == pytest.approx(19)
@@ -144,10 +144,10 @@ def test_invalid_disabled_and_failed_reruns_clear_owned_outputs(tmp_path):
     args = (tmp_path, [(0, source_segments(0)), (90, source_segments(90))], (3, -4), 1, "mm")
     assert export_rim_standardization(*args, buffer_mm=3, smooth_mm=1)["status"] == "ok"
     out = tmp_path / "rim_standardization"
-    assert (out / "standard_affine_midline_xy.ply").exists()
+    assert (out / "standard_affine" / "standard_affine_midline_xy.ply").exists()
     qa = export_rim_standardization(*args, buffer_mm=1000, smooth_mm=1)
     assert qa["status"] == "insufficient_valid_profiles"
-    assert not (out / "standard_affine_midline_xy.ply").exists()
+    assert not (out / "standard_affine" / "standard_affine_midline_xy.ply").exists()
     qa = export_rim_standardization(*args, enabled=False)
     assert qa["status"] == "disabled"
     assert not (out / "raw_midlines.csv").exists()
@@ -208,17 +208,17 @@ def test_verification_pairs_are_midpoints_before_and_after_fitting(tmp_path, sca
     assert qa['status'] == 'ok'
     out = tmp_path / 'rim_standardization'
     for prefix in ['raw', 'similarity', 'affine']:
-        mid, _ = _ply_vertices_edges(out / f'{prefix}_midlines_xy.ply')
-        pairs, edges = _ply_vertices_edges(out / f'{prefix}_pair_connectors_xy.ply')
+        mid, _ = _ply_vertices_edges((out if prefix == 'raw' else out / f'standard_{prefix}') / f'{prefix}_midlines_xy.ply')
+        pairs, edges = _ply_vertices_edges((out if prefix == 'raw' else out / f'standard_{prefix}') / f'{prefix}_pair_connectors_xy.ply')
         np.testing.assert_allclose((pairs[::2,:3]+pairs[1::2,:3])/2, mid[:,:3], atol=1e-12)
         np.testing.assert_array_equal(edges, np.arange(len(pairs)).reshape(-1,2))
         assert len(edges) == 4*33
         np.testing.assert_array_equal(mid[:,3:], np.tile([40,190,70], (len(mid),1)))
-        extensions, extension_edges = _ply_vertices_edges(out / f'{prefix}_tip_extensions_xy.ply')
+        extensions, extension_edges = _ply_vertices_edges((out if prefix == 'raw' else out / f'standard_{prefix}') / f'{prefix}_tip_extensions_xy.ply')
         np.testing.assert_allclose(extensions[::2,:3], mid[::33,:3], atol=1e-12)
         np.testing.assert_array_equal(extension_edges, np.arange(8).reshape(-1,2))
         for key in ['outer', 'inner']:
-            source, source_edges = _ply_vertices_edges(out / f'{prefix}_source_{key}_xy.ply')
+            source, source_edges = _ply_vertices_edges((out if prefix == 'raw' else out / f'standard_{prefix}') / f'{prefix}_source_{key}_xy.ply')
             assert len(source_edges) == len(source)-4
             assert np.all(source[:,2] == 0)
     with (out / 'raw_paired_points.csv').open(encoding='utf-8-sig') as f:
