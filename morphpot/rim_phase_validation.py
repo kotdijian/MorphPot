@@ -157,4 +157,7 @@ def run_phase_experiment(root, output, *, steps=(5,10,15), phases=None, interval
         dense_reference="1-degree full model; not independent truth",intervals=list(steps),phase_policy="all integer phases" if phases is None else "specified phases",sets=manifest,
         fixed=["axis","source intersection walls","lip tip","per-profile crop","endpoint policy"],
         recomputed=["right-side median reference","similarity and affine transforms","outlier filtering","standard midline and section models"]),indent=2))
+    if plots and len(steps)>1:
+        from pottery_rim_interval_plot import create_interval_plots
+        create_interval_plots(out,steps=list(steps),modes=modes,selection=selection)
     return manifest

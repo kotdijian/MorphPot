@@ -447,3 +447,24 @@ python pottery_rim_validation.py phases 0015Jinmen_small_RadialSections_1deg \
 | `phase_experiment.json` | 間隔、開始角度、予定数・有効数、使用角度・元ID、固定／再計算条件 |
 
 180平面の試行を `rim_qa.json` で確認できる1°出力が必要です。無効断面は補完せず、予定数と有効数を併記します。PLYは元入力単位、表とPNGはmmです。各セットの比較基準は同じ1°全断面モデルです。位相間ばらつきと間隔ごとの1°基準との差を併読します。位相セットや左右断面を独立標本とみなした信頼区間・有意差検定は行いません。
+
+
+### 14. 間隔依存性の直接比較画像（RimValidation 0.2.1-dev）
+
+`phases` の終了時に、2種類以上の間隔を比較し、PNGが有効な場合は `interval_dependence/interval_dependence_similarity_all.png` と `interval_dependence_affine_all.png` を自動出力します。選択群がinliers等なら末尾の名前が変わります。
+
+各画像は4パネルです。横軸は比較基準の始点からの弧長mm、間隔5/10/15°などを色分けします。器厚差（間隔モデル−共通1°基準モデル、符号あり）、中央線位置差、始点を揃えた中央線位置差、接線角度差を表示します。線は各位置での位相間中央値、半透明帯は位相間の最小〜最大です。帯は信頼区間ではありません。始点合わせ前後の位置差を比較して基準位置のずれと残る形状差を見分けます。
+
+**画像だけ再出力**する場合、モデル再計算は不要です。既存のphase_validation内の比較CSVを使います。
+
+```bash
+python pottery_rim_interval_plot.py phase_validation --steps 5 10 15
+
+# 出力先を指定、similarityだけを生成
+python pottery_rim_interval_plot.py phase_validation \
+  --output-dir interval_images --mode similarity --steps 5 10 15
+```
+
+`pottery_rim_interval_plot.py` は独立スクリプトです。この1ファイルとNumPy・Matplotlibだけで動作し、morphpotパッケージや入力メッシュは不要です。必要な入力は `comparison_05deg/similarity_all_division_comparison.csv` 等。`--steps` を省くと比較フォルダを検出します。既定は両方式、`--selection` はall/inliers/A/B、`--dpi` の既定は180。生成物はPNGのみです。既存CSV・モデルには書き込みません。
+
+異なる基準モデルや基準断面数のCSVを混ぜると停止します。全間隔で共通する記録済み測点のみ描画し、欠測はゼロに置き換えません。短い位相モデルがあると測点ごとの有効位相数は減る場合があるため、詳細は元の比較CSVとphase_station_statistics.csvで確認します。共通測点以外の補間・外挿は行いません。図は間隔を変えたときの変化量を表示し、「安定」の許容差や統計的有意差を自動判定しません。
