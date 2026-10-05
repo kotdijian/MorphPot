@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PotteryRadialSections
-Version 0.8.2
+Version 0.9.0
 
 Estimate a pottery rotation axis from a series of horizontal XY sections,
 then extract longitudinal sections through that estimated Z-parallel axis.
@@ -45,7 +45,7 @@ from morphpot.section_overlay import export_section_overlay
 from morphpot.rim_standardization import export_rim_standardization
 from scipy.optimize import least_squares
 
-__version__ = "0.8.2"
+__version__ = "0.9.0"
 
 UNIT_SCALE_TO_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0}
 
@@ -1321,7 +1321,7 @@ def process(input_path: Path, unit: str, step_deg: float, start_deg: float, axis
         "section_ply_coordinate_system":"same XYZ coordinate system and unit as input mesh",
         "wall_thickness_used_for_axis":False,
         "outer_mode_note":"If axis_surface=outer, wall thickness is intentionally not used here; single or Z-positioned thickness measurements can be used later for inner-profile reconstruction and volume calculation.",
-        "tilt_note":"Center drift versus Z is diagnostic only; the model is not auto-rotated or tilt-corrected in v0.8.2.",
+        "tilt_note":"Center drift versus Z is diagnostic only; the model is not auto-rotated or tilt-corrected in v0.9.0.",
         "volume_reconstruction_implemented":True,
         "volume_calculation":volume_summary,
         "section_overlay":overlay_summary,
@@ -1374,6 +1374,10 @@ def main():
     parser.add_argument("--rim-affine-anisotropy",type=float,default=0.1,help="Bound on opposite directional stretch factors (default: 0.1)")
     parser.add_argument("--rim-affine-shear",type=float,default=0.1,help="Absolute affine shear bound (default: 0.1)")
     parser.add_argument("--rim-affine-penalty",type=float,default=1.0,help="Regularization toward similarity for stretch/shear (default: 1)")
+    parser.add_argument("--rim-outlier-mad",type=float,default=3.5,help="Profile-wise robust rejection threshold for the additional inliers section model (default: 3.5)")
+    parser.add_argument("--no-rim-bimodal",action="store_true",help="Disable exploratory A/B section-model screening")
+    parser.add_argument("--rim-bimodal-min-profiles",type=int,default=20,help="Minimum accepted radial sides for A/B screening (default: 20; minimum 10)")
+    parser.add_argument("--rim-bimodal-bic-delta",type=float,default=10.0,help="Minimum BIC improvement of the two-component first-PC mixture (default: 10)")
     parser.add_argument("--version",action="version",version=f"%(prog)s {__version__}")
     args=parser.parse_args()
     try:
@@ -1388,7 +1392,10 @@ def main():
                  "x_progress_tol": args.rim_x_progress_tol,
                  "endpoint_weight": args.rim_endpoint_weight,
                  "affine_anisotropy": args.rim_affine_anisotropy,
-                 "affine_shear": args.rim_affine_shear, "affine_penalty": args.rim_affine_penalty})
+                 "affine_shear": args.rim_affine_shear, "affine_penalty": args.rim_affine_penalty,
+                 "outlier_mad": args.rim_outlier_mad, "bimodal": not args.no_rim_bimodal,
+                 "bimodal_min_profiles": args.rim_bimodal_min_profiles,
+                 "bimodal_bic_delta": args.rim_bimodal_bic_delta})
     except Exception as exc:
         parser.exit(1,f"ERROR: {exc}\n")
 

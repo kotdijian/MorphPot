@@ -15,6 +15,8 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import least_squares
 
 from .section_overlay import project_section, registered_branches, write_polyline_ply
+from .rim_tip import extension_tip
+from .rim_models import export_section_models, model_product_names
 
 
 def arc_positions(points):
@@ -142,13 +144,15 @@ def make_midline(outer_full, inner_return, side, spacing_mm, *, smooth_mm=2.,
         ends = [end_mm + 2*smooth_mm + 4*spacing_mm] * 2
     outer, inner = [_prefix(p, end) for p, end in zip((outer, inner), ends)]
     a, b, counts = ordered_wall_pairs(outer, inner, spacing_mm)
+    a, b, tip_meta = extension_tip(outer, inner, a, b, spacing_mm, smooth_mm)
+    meta.update(tip_meta)
     midpoint = (a + b) / 2
     thickness = np.linalg.norm(a - b, axis=1)
-    midpoint[0] = outer[0]
     meta.update(wall_pairing_samples=counts,
                 local_wall_arc_lengths_mm=[float(arc_positions(p)[-1]) for p in (outer, inner)])
     if source_geometry is not None:
-        source_geometry.update(outer=outer.copy(), inner=inner.copy(), paired_outer=a.copy(), paired_inner=b.copy())
+        source_geometry.update(outer=outer.copy(), inner=inner.copy(), paired_outer=a.copy(), paired_inner=b.copy(),
+                               tip_extension=np.array([tip_meta["tip_point_mm"], tip_meta["tip_support_point_mm"]]))
     if diagnostics is not None:
         diagnostics.update(meta)
     return midpoint, thickness
@@ -283,20 +287,24 @@ def _write_verification(out, prefix, geometry, pairs, unit_to_mm):
     connectors = [np.vstack((a, b)) for pair in pairs for a, b in zip(*pair)]
     _write_curves(out / f"{prefix}_pair_connectors_xy.ply", connectors,
                   unit_to_mm, (170, 170, 170))
+    _write_curves(out / f"{prefix}_tip_extensions_xy.ply", [g["tip_extension"] for g in geometry],
+                  unit_to_mm, (30, 30, 30))
 
 
 def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, input_unit,
                                *, enabled=True, spacing_mm=.5, smooth_mm=2., turn_angle_deg=None, x_progress_tol=.1,
                                buffer_mm=None, buffer_thickness_ratio=2., end_mm=None, points=129,
-                               endpoint_weight=5., affine_anisotropy=.1, affine_shear=.1, affine_penalty=1.):
+                               endpoint_weight=5., affine_anisotropy=.1, affine_shear=.1, affine_penalty=1.,
+                               outlier_mad=3.5, bimodal=True, bimodal_min_profiles=20, bimodal_bic_delta=10.):
     out = Path(output_dir) / "rim_standardization"
     out.mkdir(parents=True, exist_ok=True)
     # Only delete files owned by this exporter. There are no user-provided profiles here.
     known = ["raw_midlines_xy.ply", "raw_midlines.csv", "transforms.json"]
     for mode in ("similarity", "affine"):
+        known += model_product_names(mode)
         known += [f"{mode}_midlines_xy.ply", f"standard_{mode}_midline_xy.ply", f"standard_{mode}_midline.csv", f"standard_{mode}_unit_shape.csv"]
     for prefix in ("raw", "similarity", "affine"):
-        known += [f"{prefix}_source_outer_xy.ply", f"{prefix}_source_inner_xy.ply", f"{prefix}_pair_connectors_xy.ply"]
+        known += [f"{prefix}_source_outer_xy.ply", f"{prefix}_source_inner_xy.ply", f"{prefix}_pair_connectors_xy.ply", f"{prefix}_tip_extensions_xy.ply"]
     known += ["raw_paired_points.csv"]
     for name in known:
         (out / name).unlink(missing_ok=True)
@@ -304,7 +312,9 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
                   x_progress_tol=x_progress_tol,
                   buffer_mm=buffer_mm, buffer_thickness_ratio=buffer_thickness_ratio,
                   end_mm=end_mm, points=points, endpoint_weight=endpoint_weight,
-                  affine_anisotropy=affine_anisotropy, affine_shear=affine_shear, affine_penalty=affine_penalty)
+                  affine_anisotropy=affine_anisotropy, affine_shear=affine_shear, affine_penalty=affine_penalty,
+                  outlier_mad=outlier_mad, bimodal=bimodal, bimodal_min_profiles=bimodal_min_profiles,
+                  bimodal_bic_delta=bimodal_bic_delta)
     qa = {"enabled": enabled, "status": "disabled", "config": config, "input_unit": input_unit,
           "unit_to_mm": unit_to_mm, "profiles": [], "side_reference": "right; left reflected before fitting",
           "midline_definition": "midpoints of local order-preserving outer/inner wall pairs; no height monotonicity requirement",
@@ -312,9 +322,11 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
           "interpretation": "within-vessel standardization; not recovery of the unfired form or a completed between-vessel Procrustes analysis"}
     if enabled:
         positive = [spacing_mm, smooth_mm, buffer_thickness_ratio, endpoint_weight,
-                    affine_anisotropy, affine_shear, affine_penalty]
+                    affine_anisotropy, affine_shear, affine_penalty, outlier_mad, bimodal_bic_delta]
         if any(not np.isfinite(v) or v <= 0 for v in positive) or points < 8:
             raise ValueError("rim spacings, ratios, weights and affine constraints must be positive; points >=8")
+        if not isinstance(bimodal_min_profiles, int) or bimodal_min_profiles < 10:
+            raise ValueError("bimodal_min_profiles must be an integer >=10")
         if turn_angle_deg is not None:
             if not 0 < turn_angle_deg < 45:
                 raise ValueError("legacy rim turn angle must be in (0,45) degrees")
@@ -401,7 +413,7 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
                     mapped = apply_transform(source, matrix, trans)
                     aligned.append(mapped)
                     mapped_geometry.append({key: apply_transform(source_geometries[index][key], matrix, trans)
-                                            for key in ("outer", "inner")})
+                                            for key in ("outer", "inner", "tip_extension")})
                     mapped_pairs.append([apply_transform(p, matrix, trans) for p in source_pairs[index]])
                     transforms.append({"profile_id": index, "mode": mode, "angle_deg": records[index]["angle_deg"],
                                        "side": records[index]["side"], "matrix_2x2": matrix.tolist(),
@@ -428,6 +440,9 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
                 qa[mode] = {"centroid_mm": centroid.tolist(), "centroid_size_mm": size,
                             "reference": "fixed coordinate-wise median of accepted right-side cropped midlines",
                             "rms_deviation_mm": float(np.sqrt(np.mean(deviation ** 2)))}
+                qa[mode]["section_models"] = export_section_models(out, mode, aligned, mapped_pairs,
+                    records, unit_to_mm, _write_curves, geometries=mapped_geometry, outlier_mad=outlier_mad, bimodal=bimodal,
+                    bimodal_min_profiles=bimodal_min_profiles, bimodal_bic_delta=bimodal_bic_delta)
             (out / "transforms.json").write_text(json.dumps(transforms, ensure_ascii=False, indent=2), encoding="utf-8")
             qa["status"] = "ok"
         else:

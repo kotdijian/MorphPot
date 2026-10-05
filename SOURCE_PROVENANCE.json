@@ -8,7 +8,7 @@
     },
     {
       "path": "DevelopmentReport.md",
-      "sha256": "3aac411ee9c5c848987aeefbac992e57c6de9202f304ac9e454d44c73f993fa4",
+      "sha256": "5d1614198a33aa3e0a83603b336b595eb1f381bdcec7082d63222afa89589f22",
       "origin": "integration work 2026-10-05",
       "last_modified_on": "2026-10-05"
     },
@@ -24,7 +24,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "27fe1556c90a3b15585cc973dd1ad98c63ed4bee07f3afdd77385d88a2e2d3ba",
+      "sha256": "089c8262984242f36aab9cbcbf251ded8273cb08228f6cd51912b623a44e31e1",
       "origin": "integration work 2026-10-05",
       "last_modified_on": "2026-10-05"
     },
@@ -89,15 +89,15 @@
     },
     {
       "path": "pottery_radial_sections.py",
-      "sha256": "6ed5ece52c05e4091ab5d3b14a06d086265dea357f1122a533c4a70801caef8f",
+      "sha256": "4562650fd2f1bc602b9358fc73cc40d9cf41afa34d995d2047121f276b202b3f",
       "origin": "previously distributed pottery_radial_sections(5).py",
       "upstream_ref": null,
       "upstream_version": "v0.6.0",
       "upstream_sha256": "9fee2464c0acc56c49430b321e615e7f0dac5b840139f0840778ecc76b4c9554",
       "modified": true,
       "last_modified_on": "2026-10-05",
-      "local_version": "0.8.2",
-      "modification_note": "Add source section contours and wall pair verification exports in raw and transformed XY frames"
+      "local_version": "0.9.0",
+      "modification_note": "Centreline-extension lip endpoint and all/inliers/exploratory A/B standard section models from transformed original wall distances"
     },
     {
       "path": "pottery_reconstruction_3d.py",
@@ -189,14 +189,32 @@
     {
       "path": "morphpot/rim_standardization.py",
       "origin": "MorphPot development 2026-10-05",
-      "sha256": "3bd308d5bf3096f84d8fb041211082cf57197a75e3da9a632e20fe7170eeb468",
+      "sha256": "0c1233385df80394d81713284d09fb1aa683044c5d0073e7cab54e02bce25c66",
       "last_modified_on": "2026-10-05"
     },
     {
       "path": "tests/test_rim_standardization.py",
       "origin": "MorphPot development 2026-10-05",
-      "sha256": "593c6f056e2228fb33b6174796db56f82f8432568f125b544da94326dd599744",
+      "sha256": "79579f51bba0d877c3d28e0fba2144f7d8765ae11c0e2bcaab7a22dcc5a4a77b",
       "last_modified_on": "2026-10-05"
+    },
+    {
+      "path": "morphpot/rim_tip.py",
+      "origin": "MorphPot development 2026-10-05",
+      "last_modified_on": "2026-10-05",
+      "sha256": "3dc5dd6942360b1875904ab294af1e66b2cd6c3f60b801c893722e4294226b29"
+    },
+    {
+      "path": "morphpot/rim_models.py",
+      "origin": "MorphPot development 2026-10-05",
+      "last_modified_on": "2026-10-05",
+      "sha256": "67fea76629315bb52ea84319e216adf61afd23734948ef8e2fd7853b9094b0f1"
+    },
+    {
+      "path": "tests/test_rim_models.py",
+      "origin": "MorphPot development 2026-10-05",
+      "last_modified_on": "2026-10-05",
+      "sha256": "1f6f54ace3a9b929f598fd01a2cff75083ba88fe42fbde6ce8794173ca148461"
     }
   ]
 }

@@ -214,6 +214,9 @@ def test_verification_pairs_are_midpoints_before_and_after_fitting(tmp_path, sca
         np.testing.assert_array_equal(edges, np.arange(len(pairs)).reshape(-1,2))
         assert len(edges) == 4*33
         np.testing.assert_array_equal(mid[:,3:], np.tile([40,190,70], (len(mid),1)))
+        extensions, extension_edges = _ply_vertices_edges(out / f'{prefix}_tip_extensions_xy.ply')
+        np.testing.assert_allclose(extensions[::2,:3], mid[::33,:3], atol=1e-12)
+        np.testing.assert_array_equal(extension_edges, np.arange(8).reshape(-1,2))
         for key in ['outer', 'inner']:
             source, source_edges = _ply_vertices_edges(out / f'{prefix}_source_{key}_xy.ply')
             assert len(source_edges) == len(source)-4
