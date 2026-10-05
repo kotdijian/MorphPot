@@ -8,7 +8,7 @@
     },
     {
       "path": "DevelopmentReport.md",
-      "sha256": "c987857cc2686347ca1d8f6a0ee83269dbe99e74630312d97925640e283d03b7",
+      "sha256": "83ab01adf7b574d799e758f3e97f8780ddc10efb156844ec4076ca644abf7981",
       "origin": "integration work 2026-10-05",
       "last_modified_on": "2026-10-05"
     },
@@ -24,7 +24,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "3839967ac90ff42228509779bfacfaaeed5dc1c2a030ba7782d589f3a33996ad",
+      "sha256": "b6e589a4c8df284aa3d9e17603a2d010f1140672300d7111db108f37f3d055cd",
       "origin": "integration work 2026-10-05",
       "last_modified_on": "2026-10-05"
     },
@@ -89,15 +89,15 @@
     },
     {
       "path": "pottery_radial_sections.py",
-      "sha256": "65393dbec227c3d8c59ff5067041752e45e80bfd6541508778285183ec9a8cd0",
+      "sha256": "e99d1c61e70ab79ad83d9c42fe4c4a1f3f873fd227c249d0a2f0f5fcba934ed9",
       "origin": "previously distributed pottery_radial_sections(5).py",
       "upstream_ref": null,
       "upstream_version": "v0.6.0",
       "upstream_sha256": "9fee2464c0acc56c49430b321e615e7f0dac5b840139f0840778ecc76b4c9554",
       "modified": true,
       "last_modified_on": "2026-10-05",
-      "local_version": "0.7.0",
-      "modification_note": "XY full-section overlays and lip-registered median full material polyline"
+      "local_version": "0.8.0",
+      "modification_note": "Right-oriented cropped rim midlines and similarity/constrained affine within-vessel standardization"
     },
     {
       "path": "pottery_reconstruction_3d.py",
@@ -184,6 +184,18 @@
       "path": "tests/test_section_overlay.py",
       "origin": "MorphPot development 2026-10-05",
       "sha256": "fba612daca0c8e88bdb42ea5a8a97c7b5991ff049238fdf484444ad9a8151b5c",
+      "last_modified_on": "2026-10-05"
+    },
+    {
+      "path": "morphpot/rim_standardization.py",
+      "origin": "MorphPot development 2026-10-05",
+      "sha256": "9c620bf6420b20aadbca394eac61062c133f28dee9fd1cc936c89e7780e0412c",
+      "last_modified_on": "2026-10-05"
+    },
+    {
+      "path": "tests/test_rim_standardization.py",
+      "origin": "MorphPot development 2026-10-05",
+      "sha256": "39d7943a263f9cc74f9ae495faa26cacf7d842910bd9db3c37da30dac913ced5",
       "last_modified_on": "2026-10-05"
     }
   ]

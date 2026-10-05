@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PotteryRadialSections
-Version 0.7.0
+Version 0.8.0
 
 Estimate a pottery rotation axis from a series of horizontal XY sections,
 then extract longitudinal sections through that estimated Z-parallel axis.
@@ -42,9 +42,10 @@ import numpy as np
 import trimesh
 import pottery_volume_core as volume_core
 from morphpot.section_overlay import export_section_overlay
+from morphpot.rim_standardization import export_rim_standardization
 from scipy.optimize import least_squares
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 UNIT_SCALE_TO_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0}
 
@@ -1147,7 +1148,7 @@ def process(input_path: Path, unit: str, step_deg: float, start_deg: float, axis
             contour_spacing_mm: float, sample_spacing_mm: float, output_dir: Path | None,
             make_visualization: bool, volume_modes: list[str], single_angle_deg: float,
             volume_z_step_mm: float, min_angular_valid_fraction: float,
-            section_overlay: bool = True) -> dict:
+            section_overlay: bool = True, rim_options: dict | None = None) -> dict:
     if unit not in UNIT_SCALE_TO_MM: raise ValueError(f"Unsupported unit: {unit}")
     if contour_spacing_mm<=0 or sample_spacing_mm<=0: raise ValueError("Sampling spacings must be positive.")
     if center_outlier_mad<=0: raise ValueError("--center-outlier-mad must be positive.")
@@ -1271,6 +1272,12 @@ def process(input_path: Path, unit: str, step_deg: float, start_deg: float, axis
           f"({overlay_summary.get('valid_sections', 0)} valid full sections)")
     if overlay_summary.get("reason"):
         print(f"median note: {overlay_summary['reason']}")
+    rim_summary = export_rim_standardization(
+        output_dir, [(a, full_cache[i]) for i, a in enumerate(full_angles)],
+        center_native, scale, unit, spacing_mm=sample_spacing_mm, **(rim_options or {}),
+    )
+    print(f"right-oriented rim standardization: {rim_summary['status']} "
+          f"({rim_summary.get('valid_profiles', 0)} valid half-section profiles)")
     with (output_dir/"sections_summary.csv").open("w",newline="",encoding="utf-8-sig") as f:
         fields=["type","angle_deg","opposite_angle_deg","segments","sampled_points"]; w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(summary_rows)
 
@@ -1314,10 +1321,11 @@ def process(input_path: Path, unit: str, step_deg: float, start_deg: float, axis
         "section_ply_coordinate_system":"same XYZ coordinate system and unit as input mesh",
         "wall_thickness_used_for_axis":False,
         "outer_mode_note":"If axis_surface=outer, wall thickness is intentionally not used here; single or Z-positioned thickness measurements can be used later for inner-profile reconstruction and volume calculation.",
-        "tilt_note":"Center drift versus Z is diagnostic only; the model is not auto-rotated or tilt-corrected in v0.7.0.",
+        "tilt_note":"Center drift versus Z is diagnostic only; the model is not auto-rotated or tilt-corrected in v0.8.0.",
         "volume_reconstruction_implemented":True,
         "volume_calculation":volume_summary,
         "section_overlay":overlay_summary,
+        "rim_standardization":rim_summary,
     }
     write_json(output_dir/"metadata.json",metadata)
     print("\n=== Rotation axis ===")
@@ -1354,13 +1362,31 @@ def main():
     parser.add_argument("--output-dir",type=Path,help="Output directory")
     parser.add_argument("--no-visualization",action="store_true",help="Do not generate PNG reference/QC images")
     parser.add_argument("--no-section-overlay",action="store_true",help="Disable XY section overlays and lip-registered median polyline (enabled by default)")
+    parser.add_argument("--no-rim-standardization",action="store_true",help="Disable cropped right-oriented rim midlines and within-vessel registration")
+    parser.add_argument("--rim-buffer-mm",type=float,help="Arc-length buffer past the rim transition [mm]; default: 2x local radial wall thickness")
+    parser.add_argument("--rim-buffer-thickness-ratio",type=float,default=2.0,help="Automatic buffer as a multiple of local radial thickness (default: 2)")
+    parser.add_argument("--rim-end-mm",type=float,help="Manually select an arc-length endpoint from the lip [mm], replacing transition+buffer detection")
+    parser.add_argument("--rim-smooth-mm",type=float,default=2.0,help="Tangent smoothing and sustained direction length [mm] (default: 2)")
+    parser.add_argument("--rim-turn-angle-deg",type=float,default=10.0,help="Downward tangent tolerance separating left-down from down/right-down (default: 10 deg)")
+    parser.add_argument("--rim-points",type=int,default=129,help="Number of correspondingly sampled rim points (default: 129)")
+    parser.add_argument("--rim-endpoint-weight",type=float,default=5.0,help="Endpoint weight relative to each interior point (default: 5)")
+    parser.add_argument("--rim-affine-anisotropy",type=float,default=0.1,help="Bound on opposite directional stretch factors (default: 0.1)")
+    parser.add_argument("--rim-affine-shear",type=float,default=0.1,help="Absolute affine shear bound (default: 0.1)")
+    parser.add_argument("--rim-affine-penalty",type=float,default=1.0,help="Regularization toward similarity for stretch/shear (default: 1)")
     parser.add_argument("--version",action="version",version=f"%(prog)s {__version__}")
     args=parser.parse_args()
     try:
         process(args.input,args.unit,args.angle_step,args.start_angle,args.axis_surface,args.z_sections,args.z_step_mm,
                 args.center_outlier_mad,args.contour_spacing_mm,args.sample_spacing_mm,args.output_dir,not args.no_visualization,
                 args.volume_mode,args.single_angle,args.volume_z_step_mm,args.min_angular_valid_fraction,
-                not args.no_section_overlay)
+                not args.no_section_overlay,
+                {"enabled": not args.no_rim_standardization,
+                 "buffer_mm": args.rim_buffer_mm, "buffer_thickness_ratio": args.rim_buffer_thickness_ratio,
+                 "end_mm": args.rim_end_mm, "smooth_mm": args.rim_smooth_mm,
+                 "turn_angle_deg": args.rim_turn_angle_deg, "points": args.rim_points,
+                 "endpoint_weight": args.rim_endpoint_weight,
+                 "affine_anisotropy": args.rim_affine_anisotropy,
+                 "affine_shear": args.rim_affine_shear, "affine_penalty": args.rim_affine_penalty})
     except Exception as exc:
         parser.exit(1,f"ERROR: {exc}\n")
 
