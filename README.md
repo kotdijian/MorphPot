@@ -376,3 +376,42 @@ v0.10.0までは標準中央線の法線を各個別中央点に置いて距離�
 検証例：一定厚4mm、方向差±30°の個別平行壁で、旧方式4.6188mm→新方式4.0000mm。提供0°–180°断面は左右2本のみで、修正前後の標準器厚差は最大約0.068mm。画像だけで今回の全方位の膨らみをこの問題に帰属しません。
 
 `*_pair_connectors_xy.ply`は内外対応点を結ぶ線であり、元輪郭そのものではありません。口唇の新始点から支持位置までは対応点の直線補間を含むため、その外周と、元輪郭法線交点で再構成した丸い端部は一致しないことがあります。標準断面の肥厚を確認する際は、同じ方式サブフォルダの`*_source_outer_xy.ply`／`*_source_inner_xy.ply`も重ねて確認してください。比較終端を結ぶ人工切断線は外面・内面別PLYで除いて確認できます。多方位での局所方向、対応弧長、交点の枝選択の妥当性は継続検証対象です。
+
+
+### 12. 口縁部の検証版（RimValidation 0.1.0-dev）
+
+公開版に向けた検証専用CLI `pottery_rim_validation.py` を追加しました。RadialSections本体はv0.10.1のままです。入力は既に生成した断面出力フォルダ、または分割数検証用のメッシュです。元のPLYへ姿勢Transformを再適用しません。
+
+```bash
+# 既存出力を始点から1mm間隔で検証（similarity/affineの両方）
+python pottery_rim_validation.py validate sample_RadialSections_5deg \
+  --output-dir validation --interval-mm 1
+
+# 角度間隔だけを変えて再抽出し、最後の5度を比較基準にする
+python pottery_rim_validation.py sweep sample.ply \
+  --output-dir division_validation --steps 30 15 10 5 --interval-mm 1 \
+  -- --unit m --z-step-mm 5 --rim-end-mode radial_turn
+
+# 既存の複数条件を比較（最後のフォルダが基準）
+python pottery_rim_validation.py compare run_30deg run_15deg run_5deg \
+  --output-dir comparison --interval-mm 1 --mode similarity
+```
+
+`--mode similarity|affine|both`、`--selection all|inliers|A|B`（既定all）、`--no-plots` に対応します。A/Bは生成済みの場合のみ指定できます。sweepでは容量計算・従来の概観画像を省き、検証用の断面重ね合わせ画像は生成します。必要な単位・終端などの抽出オプションは `--` の後に渡します。
+
+**位置の定義**：標準中央線の始点から指定したmm間隔で測点を置きます。始点そのものは単一の口唇接点なので器厚評価に含めません。`absolute_mm` は各変換済み中央線でも同じ弧長、`corresponding_u` は標準測点の対応インデックス比率uを各断面に移します。断面の長さが違うため両者は一致するとは限りません。どちらも各断面自身の局所法線と、元のメッシュ交線から保持した内外面ポリラインとの両方向交点から器厚を再測定します。交点なし・対象長さ外は欠測で、pair projectionによる代替や外挿は行いません。入力mm換算の元器厚も逆対応位置で測定し、相似・アフィンのサイズ補正と区別します。
+
+| 出力 | 内容 |
+| --- | --- |
+| `validation_XX/standard_MODE_SELECTION/station_measurements.csv` | 断面別・測点別・位置定義別のモデル厚、変換後実測厚、元実測厚、誤差、中央線位置差、欠測理由 |
+| `station_statistics.csv` | 各位置の有効数、平均・最小・最大・母標準偏差、モデルに対するbias/RMSE |
+| `profile_geometry.csv` | 中央線RMS、始点・終端位置差、元と変換後の弧長、変換の主伸縮率 |
+| `profile_NNN_overlay_xy.ply` / `.png` | 灰色の元メッシュ断面内外面と赤色の標準モデル内外面の重ね合わせ。コネクタや人工終端閉鎖線は使わない |
+| `profile_NNN_model_xy.ply` | 同じ座標・入力単位の標準モデル単独PLY |
+| `validation.json` | 比較定義、条件、断面数、制約 |
+| `MODE_SELECTION_division_comparison.csv` | 分割条件間の共通弧長測点における中央線位置差、始点を揃えた位置差、厚み差、接線角度差 |
+| `MODE_SELECTION_division_summary.json` | 分割条件間のRMS・最大差、弧長差、終端差、両条件の設定 |
+
+測定ポリラインには終端検出の余裕範囲も残っています。画像の黒点は標準中央線上の測点です。PLYは入力単位、表・画像はmmです。72方向を設定していても抽出無効方向があれば検証数は減ります。分割間隔の比較では角度の開始位置、器軸推定条件、終端方針、中央線点数などを揃え、抽出側の `rim_qa.json` と検証有効数を併読してください。中央線の補間点数（`--rim-points`）は角度分割数とは別の条件です。必要なら点数だけ変更した出力をcompareで検証できます。
+
+この比較はモデル構築に利用した同じメッシュ交線に対する記述的検証です。独立した実物計測に対する精度評価ではありません。高密度分割を正解とはみなさず、変化量を出力します。「変わらない」の許容幅は測定分解能・研究目的から別途指定する必要があります。autoで終端方針が変わった場合は分割数だけの比較にならないため、設定を確認して同じ方針で再実行します。
