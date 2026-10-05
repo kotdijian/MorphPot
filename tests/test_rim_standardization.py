@@ -7,6 +7,7 @@ import pytest
 from morphpot.rim_standardization import (
     apply_transform, crop_rim, export_rim_standardization, fit_constrained_affine,
     fit_similarity, make_midline, unit_shape,
+    horizontal_stop, sample_curve, arc_positions,
 )
 from morphpot.section_overlay import registered_branches
 
@@ -45,7 +46,8 @@ def test_both_sides_have_same_right_oriented_midline():
     np.testing.assert_allclose(ta, tb)
     assert (a[:, 0] > 0).all()
     np.testing.assert_allclose(a[0], [19, 40])
-    assert ta[10] == pytest.approx(2)
+    # Pair separation on a sloping wall approximates normal distance, not radial 2mm.
+    assert ta[10] == pytest.approx(2 / np.sqrt(1 + .6**2), abs=.15)
 
 
 def test_reflection_preserves_observed_left_right_asymmetry_before_registration():
@@ -54,21 +56,23 @@ def test_reflection_preserves_observed_left_right_asymmetry_before_registration(
     outer, inner = registered_branches(segments)
     right, _ = make_midline(outer, inner, "right", .25)
     left, _ = make_midline(outer, inner, "left", .25)
-    np.testing.assert_allclose(left[:, 0], right[:, 0] * 1.05)
-    np.testing.assert_allclose(left[:, 1], right[:, 1])
+    assert left[0, 0] == pytest.approx(right[0, 0] * 1.05)
+    a = sample_curve(left, np.linspace(0, arc_positions(left)[-1], 33))
+    b = sample_curve(right, np.linspace(0, arc_positions(right)[-1], 33))
+    assert np.linalg.norm(a - b) > .5
 
 
 def test_crop_stops_after_neck_before_lower_body():
     outer, inner = registered_branches(rim_contour())
     line, thickness = make_midline(outer, inner, "right", .25)
     cropped, qa = crop_rim(line, thickness, spacing_mm=.25, smooth_mm=1., buffer_mm=3)
-    assert qa["selection"] == "direction_transition"
+    assert qa["selection"] == "horizontal_stall_or_reversal"
     assert 26 < qa["change_point_mm"][1] < 33
     assert qa["end_arc_length_mm"] - qa["change_arc_length_mm"] == pytest.approx(3)
     assert cropped[-1, 1] > 20
     np.testing.assert_allclose(cropped[0], line[0])
     _, auto = crop_rim(line, thickness, spacing_mm=.25, smooth_mm=1.)
-    assert auto["buffer_mm"] == pytest.approx(4)
+    assert auto["buffer_mm"] == pytest.approx(2 * auto["local_paired_wall_separation_mm"])
 
 
 def test_straight_or_initially_right_down_rims_require_manual_end():
@@ -149,3 +153,40 @@ def test_invalid_disabled_and_failed_reruns_clear_owned_outputs(tmp_path):
     assert not (out / "raw_midlines.csv").exists()
     with pytest.raises(ValueError):
         export_rim_standardization(*args, smooth_mm=-1)
+
+
+def test_horizontal_stop_does_not_require_downward_motion():
+    x = np.r_[np.linspace(20, 10, 41), np.full(40, 10)]
+    for sign in [-1, 1]:
+        y = sign * np.linspace(0, 20, len(x))
+        p = np.column_stack([x, y])
+        distance, point, progress = horizontal_stop(p, .25, 1, .1)
+        assert point[0] == pytest.approx(10, abs=.3)
+        assert distance > 10
+        assert progress >= -.1
+
+
+def test_short_horizontal_jitter_does_not_stop_before_sustained_stall():
+    t = np.linspace(0, 40, 161)
+    x = 30 - np.minimum(t, 25) + .02 * np.sin(t * 12)
+    p = np.column_stack([x, t])
+    _, point, _ = horizontal_stop(p, .25, 2, .1)
+    assert point[0] == pytest.approx(5, abs=.3)
+
+
+def test_nonmonotone_lower_body_does_not_change_local_rim():
+    original = rim_contour()
+    o1, i1 = registered_branches(original)
+    # Insert an upward jog after the 10mm-height station on the right wall.
+    # Keep outer bottom and inner floor unchanged.
+    oi = np.flatnonzero((o1[:, 0] > 0) & np.isclose(o1[:, 1], 10))[0]
+    ii = np.flatnonzero((i1[:, 0] > 0) & np.isclose(i1[:, 1], 10))[0]
+    o2 = np.insert(o1, oi+1, o1[oi] + [0, 2, 0], axis=0)
+    i2 = np.insert(i1, ii, i1[ii] + [0, 2, 0], axis=0)
+    m1, _ = make_midline(o1, i1, "right", .25, buffer_mm=3)
+    m2, _ = make_midline(o2, i2, "right", .25, buffer_mm=3)
+    # Body modifications must not invalidate the region. Allow discretization
+    # drift of stop detection due to the total branch sampling grid.
+    a = sample_curve(m1, np.linspace(0, 14, 29))
+    b = sample_curve(m2, np.linspace(0, 14, 29))
+    np.testing.assert_allclose(a, b, atol=.2)

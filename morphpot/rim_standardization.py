@@ -1,6 +1,6 @@
 """Right-oriented, cropped rim midlines and within-vessel registration.
 
-Midlines use the radial midpoint of outer/inner walls at the same input height.
+Midlines use locally paired outer/inner wall points in lip-to-end contour order.
 They are not a medial-axis skeleton or a normal-thickness reconstruction.
 """
 from __future__ import annotations
@@ -30,7 +30,7 @@ def sample_curve(points, positions):
 
 
 def side_to_axis(points):
-    """Keep the lip-to-axis part; require descent instead of bridging folds."""
+    """Keep the ordered lip-to-axis part without a height-monotonicity test."""
     for i, (a, b) in enumerate(zip(points[:-1], points[1:])):
         if b[0] <= 0:
             t = a[0] / (a[0] - b[0])
@@ -38,19 +38,80 @@ def side_to_axis(points):
     raise ValueError("wall branch does not reach the axis")
 
 
-def radius_at_heights(branch, heights, outer):
-    if np.any(np.diff(branch[:, 1]) > 1e-5):
-        raise ValueError("non-monotone wall height; automatic radial midline is ambiguous")
-    # At a flat lip segment, use its wall-side extreme; the midpoint pairs caps.
-    y, groups = np.unique(branch[:, 1], return_inverse=True)
-    if len(y) < 2:
-        raise ValueError("insufficient wall-height samples")
-    x = np.full(len(y), -np.inf if outer else np.inf)
-    (np.maximum.at if outer else np.minimum.at)(x, groups, branch[:, 0])
-    return np.interp(heights, y, x)
+def horizontal_stop(points, spacing_mm, smooth_mm, x_progress_tol):
+    """First sustained stall/reversal after sustained leftward motion; ignore Y sign."""
+    s = arc_positions(points)
+    if s[-1] <= 2 * smooth_mm:
+        raise ValueError("curve too short for a sustained horizontal transition")
+    grid = np.linspace(0, s[-1], max(8, int(np.ceil(s[-1] / spacing_mm)) + 1))
+    line = sample_curve(points, grid)
+    ds = float(grid[1] - grid[0])
+    x = gaussian_filter1d(line[:, 0], max(.5, smooth_mm / (2 * ds)), mode="nearest")
+    dx_ds = np.gradient(x, grid)
+    run = max(2, int(np.ceil(smooth_mm / ds)))
+    seen_left = False
+    for i in range(run, len(line) - run + 1):
+        if np.all(dx_ds[i-run:i] < -x_progress_tol):
+            seen_left = True
+        if seen_left and np.all(dx_ds[i:i+run] >= -x_progress_tol):
+            return float(grid[i]), line[i], float(dx_ds[i])
+    raise ValueError("no sustained leftward stall/reversal; specify --rim-end-mm manually")
 
 
-def make_midline(outer_full, inner_return, side, spacing_mm):
+def _prefix(points, end):
+    s = arc_positions(points)
+    end = min(float(end), float(s[-1]))
+    return np.vstack([points[s < end], sample_curve(points, [end])])
+
+
+def ordered_wall_pairs(outer, inner, spacing_mm):
+    """Local distance-minimizing DTW correspondence, preserving lip-to-end order.
+
+    A 25% normalized arc-position band limits correspondence drift; each local
+    wall is sampled at <=512 points to bound memory and runtime.
+    """
+    lengths = [arc_positions(p)[-1] for p in (outer, inner)]
+    counts = [min(512, max(8, int(np.ceil(v / spacing_mm)) + 1)) for v in lengths]
+    a, b = [sample_curve(p, np.linspace(0, length, count))
+            for p, length, count in zip((outer, inner), lengths, counts)]
+    n, m = len(a), len(b)
+    cost = np.sum((a[:, None] - b[None, :]) ** 2, axis=2)
+    cost += (.02 * max(lengths)) ** 2 * (np.linspace(0, 1, n)[:, None] - np.linspace(0, 1, m)[None, :]) ** 2
+    score = np.full((n + 1, m + 1), np.inf)
+    score[0, 0] = 0
+    parent = np.zeros((n, m), dtype=np.uint8)
+    for i in range(n):
+        lo = max(0, int(np.floor((i / (n-1) - .25) * (m-1))))
+        hi = min(m, int(np.ceil((i / (n-1) + .25) * (m-1))) + 1)
+        for j in range(lo, hi):
+            candidates = [score[i, j], score[i, j+1], score[i+1, j]]
+            step = int(np.argmin(candidates))
+            score[i+1, j+1] = cost[i, j] + candidates[step]
+            parent[i, j] = step
+    if not np.isfinite(score[n, m]):
+        raise ValueError("local wall correspondence outside order-preserving band")
+    pairs = []
+    i, j = n-1, m-1
+    while True:
+        pairs.append((i, j))
+        if i == 0 and j == 0:
+            break
+        step = parent[i, j]
+        if step == 0:
+            i -= 1; j -= 1
+        elif step == 1:
+            i -= 1
+        else:
+            j -= 1
+        if i < 0 or j < 0:
+            raise ValueError("invalid wall correspondence path")
+    pairs = np.asarray(pairs[::-1])
+    return a[pairs[:, 0]], b[pairs[:, 1]], counts
+
+
+def make_midline(outer_full, inner_return, side, spacing_mm, *, smooth_mm=2.,
+                 x_progress_tol=.1, buffer_mm=None, buffer_thickness_ratio=2.,
+                 end_mm=None, diagnostics=None):
     if side == "right":
         outer, inner = outer_full.copy(), inner_return[::-1].copy()
     elif side == "left":
@@ -60,31 +121,42 @@ def make_midline(outer_full, inner_return, side, spacing_mm):
     else:
         raise ValueError("side must be right or left")
     outer, inner = side_to_axis(outer[:, :2]), side_to_axis(inner[:, :2])
-    # Stop at each wall's first bottom ordinate, before the horizontal floor.
-    outer = outer[:int(np.argmin(outer[:, 1])) + 1]
-    inner = inner[:int(np.argmin(inner[:, 1])) + 1]
-    high = min(outer[0, 1], inner[0, 1])
-    low = max(outer[:, 1].min(), inner[:, 1].min())
-    if high - low < 3 * spacing_mm:
-        raise ValueError("wall too short for rim extraction")
-    # Avoid the exact flat inner-floor ordinate, which does not describe wall radius.
-    y = np.linspace(high, low, max(8, int(np.ceil((high - low) / spacing_mm)) + 1), endpoint=False)
-    ro, ri = radius_at_heights(outer, y, True), radius_at_heights(inner, y, False)
-    thickness = ro - ri
-    if np.any(thickness <= 0):
-        raise ValueError("non-positive radial wall thickness")
-    midpoint = np.column_stack([(ro + ri) / 2, y])
-    # Explicit lip anchor, shared by the outer and inner branches.
+    meta = {"wall_pairing": "local order-preserving DTW; 25% band; at most 512 samples per wall"}
+    if end_mm is None:
+        so, po, _ = horizontal_stop(outer, spacing_mm, smooth_mm, x_progress_tol)
+        si, pi, _ = horizontal_stop(inner, spacing_mm, smooth_mm, x_progress_tol)
+        separation = float(np.linalg.norm(po - pi))
+        if separation <= 1e-8 and buffer_mm is None:
+            raise ValueError("zero wall separation at transition")
+        provisional_buffer = float(buffer_mm if buffer_mm is not None else separation * buffer_thickness_ratio)
+        # Pair a local prefix with a detection margin, then crop the central line.
+        # Lower-body geometry never participates in this correspondence.
+        ends = [so + provisional_buffer + 2*smooth_mm, si + provisional_buffer + 2*smooth_mm]
+        if any(end - 2*smooth_mm > arc_positions(p)[-1] for end, p in zip(ends, (outer, inner))):
+            raise ValueError("insufficient wall beyond the transition for the requested buffer")
+        meta.update(outer_stop_arc_mm=so, inner_stop_arc_mm=si,
+                    outer_stop_point_mm=po.tolist(), inner_stop_point_mm=pi.tolist())
+    else:
+        if any(end_mm > arc_positions(p)[-1] for p in (outer, inner)):
+            raise ValueError("manual rim end exceeds an available wall branch")
+        ends = [end_mm + 2*smooth_mm + 4*spacing_mm] * 2
+    outer, inner = [_prefix(p, end) for p, end in zip((outer, inner), ends)]
+    a, b, counts = ordered_wall_pairs(outer, inner, spacing_mm)
+    midpoint = (a + b) / 2
+    thickness = np.linalg.norm(a - b, axis=1)
     midpoint[0] = outer[0]
+    meta.update(wall_pairing_samples=counts,
+                local_wall_arc_lengths_mm=[float(arc_positions(p)[-1]) for p in (outer, inner)])
+    if diagnostics is not None:
+        diagnostics.update(meta)
     return midpoint, thickness
 
 
 def crop_rim(midline, thickness, *, spacing_mm=.5, smooth_mm=2.,
-             turn_angle_deg=10., buffer_mm=None, buffer_thickness_ratio=2., end_mm=None):
+             turn_angle_deg=None, x_progress_tol=.1, buffer_mm=None, buffer_thickness_ratio=2., end_mm=None):
     s = arc_positions(midline)
     grid = np.linspace(0, s[-1], max(8, int(np.ceil(s[-1] / spacing_mm)) + 1))
     line = sample_curve(midline, grid)
-    wall = np.interp(grid, s, thickness)
     meta = {"full_arc_length_mm": float(s[-1])}
     if end_mm is not None:
         if not 0 < end_mm <= s[-1]:
@@ -92,31 +164,17 @@ def crop_rim(midline, thickness, *, spacing_mm=.5, smooth_mm=2.,
         end = float(end_mm)
         meta.update(selection="manual_arc_length", change_arc_length_mm=None, buffer_mm=None)
     else:
-        ds = float(grid[1] - grid[0])
-        smooth = gaussian_filter1d(line, max(.5, smooth_mm / (2 * ds)), axis=0, mode="nearest")
-        tangent = np.gradient(smooth, axis=0)
-        tangent /= np.maximum(np.linalg.norm(tangent, axis=1, keepdims=True), 1e-12)
-        threshold = np.sin(np.deg2rad(turn_angle_deg))
-        descending = tangent[:, 1] < -.5
-        left_down = descending & (tangent[:, 0] < -threshold)
-        down_or_right = descending & (tangent[:, 0] >= -threshold)
-        run = max(2, int(np.ceil(smooth_mm / ds)))
-        seen_left = False
-        change = None
-        for i in range(1, len(line) - run):
-            if i >= run and np.all(left_down[i - run:i]):
-                seen_left = True
-            if seen_left and np.all(down_or_right[i:i + run]):
-                change = i
-                break
-        if change is None:
-            raise ValueError("no sustained left-down to down/right-down transition; specify --rim-end-mm to select the region manually")
-        buffer = float(buffer_mm if buffer_mm is not None else wall[change] * buffer_thickness_ratio)
-        end = float(grid[change] + buffer)
+        if turn_angle_deg is not None:
+            x_progress_tol = float(np.sin(np.deg2rad(turn_angle_deg)))
+        change_s, change_point, progress = horizontal_stop(midline, spacing_mm, smooth_mm, x_progress_tol)
+        local_thickness = float(np.interp(change_s, s, thickness))
+        buffer = float(buffer_mm if buffer_mm is not None else local_thickness * buffer_thickness_ratio)
+        end = float(change_s + buffer)
         if end > s[-1]:
             raise ValueError("insufficient midline beyond the transition for the requested buffer")
-        meta.update(selection="direction_transition", change_arc_length_mm=float(grid[change]),
-                    change_point_mm=line[change].tolist(), local_radial_thickness_mm=float(wall[change]), buffer_mm=buffer)
+        meta.update(selection="horizontal_stall_or_reversal", change_arc_length_mm=change_s,
+                    change_point_mm=change_point.tolist(), x_progress_at_change=progress,
+                    local_paired_wall_separation_mm=local_thickness, buffer_mm=buffer)
     positions = np.r_[grid[grid < end], end]
     cropped = sample_curve(midline, positions)
     if len(cropped) < 4:
@@ -213,7 +271,7 @@ def _write_curves(path, curves, unit_to_mm):
 
 
 def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, input_unit,
-                               *, enabled=True, spacing_mm=.5, smooth_mm=2., turn_angle_deg=10.,
+                               *, enabled=True, spacing_mm=.5, smooth_mm=2., turn_angle_deg=None, x_progress_tol=.1,
                                buffer_mm=None, buffer_thickness_ratio=2., end_mm=None, points=129,
                                endpoint_weight=5., affine_anisotropy=.1, affine_shear=.1, affine_penalty=1.):
     out = Path(output_dir) / "rim_standardization"
@@ -225,12 +283,13 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
     for name in known:
         (out / name).unlink(missing_ok=True)
     config = dict(spacing_mm=spacing_mm, smooth_mm=smooth_mm, turn_angle_deg=turn_angle_deg,
+                  x_progress_tol=x_progress_tol,
                   buffer_mm=buffer_mm, buffer_thickness_ratio=buffer_thickness_ratio,
                   end_mm=end_mm, points=points, endpoint_weight=endpoint_weight,
                   affine_anisotropy=affine_anisotropy, affine_shear=affine_shear, affine_penalty=affine_penalty)
     qa = {"enabled": enabled, "status": "disabled", "config": config, "input_unit": input_unit,
           "unit_to_mm": unit_to_mm, "profiles": [], "side_reference": "right; left reflected before fitting",
-          "midline_definition": "radial midpoint of inner/outer wall at equal input height",
+          "midline_definition": "midpoints of local order-preserving outer/inner wall pairs; no height monotonicity requirement",
           "xy_frame": "X=right-oriented radius, Y=original input Z, Z=0",
           "interpretation": "within-vessel standardization; not recovery of the unfired form or a completed between-vessel Procrustes analysis"}
     if enabled:
@@ -238,8 +297,13 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
                     affine_anisotropy, affine_shear, affine_penalty]
         if any(not np.isfinite(v) or v <= 0 for v in positive) or points < 8:
             raise ValueError("rim spacings, ratios, weights and affine constraints must be positive; points >=8")
-        if not 0 < turn_angle_deg < 45:
-            raise ValueError("rim turn angle must be in (0,45) degrees")
+        if turn_angle_deg is not None:
+            if not 0 < turn_angle_deg < 45:
+                raise ValueError("legacy rim turn angle must be in (0,45) degrees")
+            x_progress_tol = float(np.sin(np.deg2rad(turn_angle_deg)))
+        if not np.isfinite(x_progress_tol) or not 0 < x_progress_tol < 1:
+            raise ValueError("rim X progress tolerance must be in (0,1)")
+        qa["config"]["effective_x_progress_tol"] = x_progress_tol
         if buffer_mm is not None and (not np.isfinite(buffer_mm) or buffer_mm < 0):
             raise ValueError("rim buffer must be finite and non-negative")
         if end_mm is not None and (not np.isfinite(end_mm) or end_mm <= 0):
@@ -254,9 +318,11 @@ def export_rim_standardization(output_dir, sections, center_xy, unit_to_mm, inpu
             for side in ("right", "left"):
                 record = {"angle_deg": float(angle), "side": side}
                 try:
-                    midline, thickness = make_midline(outer, inner, side, spacing_mm)
+                    midline, thickness = make_midline(outer, inner, side, spacing_mm,
+                        smooth_mm=smooth_mm, x_progress_tol=x_progress_tol, buffer_mm=buffer_mm,
+                        buffer_thickness_ratio=buffer_thickness_ratio, end_mm=end_mm, diagnostics=record)
                     crop, meta = crop_rim(midline, thickness, spacing_mm=spacing_mm, smooth_mm=smooth_mm,
-                                          turn_angle_deg=turn_angle_deg, buffer_mm=buffer_mm,
+                                          x_progress_tol=x_progress_tol, buffer_mm=buffer_mm,
                                           buffer_thickness_ratio=buffer_thickness_ratio, end_mm=end_mm)
                     sample = sample_curve(crop, np.linspace(0, arc_positions(crop)[-1], points))
                     accepted.append(sample)
