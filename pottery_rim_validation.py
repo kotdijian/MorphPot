@@ -4,13 +4,14 @@ from pathlib import Path
 import subprocess
 import sys
 from morphpot.rim_validation import validate_run, compare_runs, VERSION
+from morphpot.rim_phase_validation import run_phase_experiment
 
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description="Development validation of rim thickness, mesh overlays and angular sampling")
     parser.add_argument("--version",action="version",version=VERSION)
     sub=parser.add_subparsers(dest="command",required=True)
-    for command in ("validate","compare","sweep"):
+    for command in ("validate","compare","sweep","phases"):
         p=sub.add_parser(command)
         p.add_argument("--output-dir",type=Path,required=True)
         p.add_argument("--interval-mm",type=float,default=1.)
@@ -19,11 +20,20 @@ def main(argv=None):
         p.add_argument("--no-plots",action="store_true")
         if command=="sweep":
             p.add_argument("mesh",type=Path);p.add_argument("--steps",type=float,nargs="+",default=[30,15,10,5])
+        elif command=="phases":
+            p.add_argument("run",type=Path,help="1-degree section output directory")
+            p.add_argument("--steps",type=int,nargs="+",default=[5,10,15])
+            p.add_argument("--phases",type=int,nargs="+",help="Explicit offsets; default all phases per interval")
         else: p.add_argument("runs",type=Path,nargs="+",help="Section output directories; compare uses last as reference")
     args,extra=parser.parse_known_args(argv)
     if args.interval_mm<=0: parser.error("--interval-mm must be positive")
     if args.command!="sweep" and extra:parser.error(f"Unknown arguments: {extra}")
     modes=["similarity","affine"] if args.mode=="both" else [args.mode]
+    if args.command=="phases":
+        run_phase_experiment(args.run,args.output_dir,steps=args.steps,phases=args.phases,interval_mm=args.interval_mm,
+                             modes=modes,selection=args.selection,plots=not args.no_plots)
+        print(f"Phase/interval experiment written to {args.output_dir}")
+        return
     roots=getattr(args,"runs",[])
     if args.command=="sweep":
         if len(args.steps)<2 or any(s<=0 or s>180 for s in args.steps):parser.error("At least two angular steps in (0,180] required")

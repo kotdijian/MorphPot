@@ -11,7 +11,7 @@ import numpy as np
 from .rim_models import _ray_distances
 from .rim_standardization import arc_positions, sample_curve, _write_curves
 
-VERSION = "0.1.0-dev"
+VERSION = "0.2.0-dev"
 
 
 def read_curves(path, scale):
@@ -64,8 +64,11 @@ def ray_width(points, normal, geometry):
 
 def write_overlay(path, geometry, model, scale):
     """One colored edge PLY; never create connecting edges between walls."""
-    curves=[geometry["outer"],geometry["inner"],model["outer"],model["inner"]]
-    colors=[(150,150,150)]*2+[(220,50,50)]*2
+    write_colored_curves(path,[geometry["outer"],geometry["inner"],model["outer"],model["inner"]],
+                         [(150,150,150)]*2+[(220,50,50)]*2,scale)
+
+
+def write_colored_curves(path, curves, colors, scale):
     with Path(path).open("w",encoding="ascii") as f:
         f.write(f"ply\nformat ascii 1.0\nelement vertex {sum(map(len,curves))}\nproperty double x\nproperty double y\nproperty double z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nelement edge {sum(len(c)-1 for c in curves)}\nproperty int vertex1\nproperty int vertex2\nend_header\n")
         for curve,color in zip(curves,colors):
@@ -111,6 +114,23 @@ def validate_run(root, output, *, interval_mm=1., mode="similarity", selection="
     if not len(stations): raise ValueError("Interval exceeds standard midline length")
     model_points,model_normals=station_frame(standard,stations)
     model_width=ray_width(model_points,model_normals,run["walls"])
+    all_walls=[run[k][i] for i in run["ids"] for k in ("outer","inner")]
+    model_walls=[run["walls"][k] for k in ("outer","inner")]
+    write_colored_curves(out/"profile_all_overlay.ply",all_walls+model_walls,
+                         [(150,150,150)]*len(all_walls)+[(220,50,50)]*2,run["scale"])
+    if plots:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        fig,ax=plt.subplots(figsize=(8,7))
+        for index,wall in enumerate(all_walls):
+            ax.plot(*wall.T,color=".5",alpha=.35,lw=.6,label="Mesh sections" if index==0 else None)
+        for index,wall in enumerate(model_walls):
+            ax.plot(*wall.T,color="crimson",lw=2,label="Standard model" if index==0 else None)
+        ax.scatter(*model_points.T,s=10,c="black",label=f"Stations ({interval_mm:g} mm)")
+        ax.set(aspect="equal",xlabel="Projected radius [mm]",ylabel="Height [mm]",
+               title=f"{mode} / {selection}: {len(run['ids'])} profiles + model")
+        ax.legend();fig.tight_layout();fig.savefig(out/"profile_all_overlay.png",dpi=160);plt.close(fig)
     rows=[]; profile_stats=[]
     for i in run["ids"]:
         curve=run["mids"][i]; arc=arc_positions(curve); raw=run["raw_mids"][i]; raw_arc=arc_positions(raw)
@@ -179,6 +199,7 @@ def validate_run(root, output, *, interval_mm=1., mode="similarity", selection="
     rows_csv(out/"station_statistics.csv",stats)
     meta=dict(version=VERSION,source=str(run["root"].resolve()),mode=mode,selection=selection,interval_mm=interval_mm,
         profile_count=len(run["ids"]),standard_arc_mm=float(length),
+        summary_overlay="profile_all_overlay.ply",summary_png="profile_all_overlay.png" if plots else None,
         definitions={"absolute_mm":"same arc length from each transformed lip", "corresponding_u":"same normalized sample correspondence; stations spaced on standard arc", "original":"original units converted to mm at inverse sample correspondence", "std":"population ddof=0", "missing":"no projection fallback or extrapolation"},
         limitations=["mesh intersections are not independent physical ground truth", "model uses these same profiles; in-sample descriptive validation", "source walls include detection margin past comparison endpoint", "profile overlay and model PLY share coordinates and input units", "no restoration/original surface labels available"])
     (out/"validation.json").write_text(json.dumps(meta,ensure_ascii=False,indent=2))

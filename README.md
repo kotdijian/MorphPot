@@ -415,3 +415,35 @@ python pottery_rim_validation.py compare run_30deg run_15deg run_5deg \
 測定ポリラインには終端検出の余裕範囲も残っています。画像の黒点は標準中央線上の測点です。PLYは入力単位、表・画像はmmです。72方向を設定していても抽出無効方向があれば検証数は減ります。分割間隔の比較では角度の開始位置、器軸推定条件、終端方針、中央線点数などを揃え、抽出側の `rim_qa.json` と検証有効数を併読してください。中央線の補間点数（`--rim-points`）は角度分割数とは別の条件です。必要なら点数だけ変更した出力をcompareで検証できます。
 
 この比較はモデル構築に利用した同じメッシュ交線に対する記述的検証です。独立した実物計測に対する精度評価ではありません。高密度分割を正解とはみなさず、変化量を出力します。「変わらない」の許容幅は測定分解能・研究目的から別途指定する必要があります。autoで終端方針が変わった場合は分割数だけの比較にならないため、設定を確認して同じ方針で再実行します。
+
+
+### 13. 全断面サマリーと1°出力による開始角度・間隔検証（RimValidation 0.2.0-dev）
+
+`validate` は各方式・選択群のフォルダに `profile_all_overlay.ply` と `profile_all_overlay.png` を追加します。選択された全半断面の元内外面（灰）と標準モデルの内外面（赤）を同じ座標に重ねます。個別の `profile_NNN_overlay_xy.ply` / `.png` も補足資料用に引き続き生成します。`--no-plots` を指定した場合だけPNGを省きます。
+
+```bash
+# 180平面（0〜179°など）を試行した1°間隔の解析出力を指定
+python pottery_rim_validation.py phases 0015Jinmen_small_RadialSections_1deg \
+  --output-dir phase_validation --steps 5 10 15 --interval-mm 5
+
+# どの間隔でも開始角度を0〜4°の5セットだけに限定する場合
+python pottery_rim_validation.py phases 0015Jinmen_small_RadialSections_1deg \
+  --output-dir phase_validation_5starts --steps 5 10 15 --phases 0 1 2 3 4 \
+  --interval-mm 5
+```
+
+既定では5°の5位相、10°の10位相、15°の15位相、計30セットを生成します。欠落のない場合、各セットはそれぞれ72・36・24半断面です。左右は同じ断面平面のセットに属します。開始角度は元の1°グリッドの最小角からの相対オフセットです。明示的な `--phases` で10°・15°を5セットに絞る場合、その間隔の全位相を網羅する検証ではありません。
+
+**再計算範囲**：1°出力の元内外輪郭、中央線、内外対応点を抽出します。器軸・口唇始点・各断面の終端範囲は1°抽出時のものに固定し、各セットの右側中央値基準、similarity/affine変換、外れ値判定、標準中央線と標準断面モデルを再計算します。既存の変換済みモデルを間引く処理ではありません。これは標準モデル構築の開始角度・間隔依存性を切り分ける実験で、セットごとに器軸推定や終端検出から再実行する総合的な感度検証とは区別します。
+
+| 出力 | 内容 |
+| --- | --- |
+| `interval_05deg/phase_00deg/rim_standardization/` 等 | セットごとに再構築した元輪郭、変換、モデル、分布、QA。profile_idはセット内ID、source_profile_idで1°元IDへ対応 |
+| 各セットの `validation/standard_MODE_SELECTION/` | 測点別比較、個別重ね合わせ、`profile_all_overlay.ply` / `.png` |
+| `dense_reference_validation/` | 1°全断面モデルと全元断面の検証・サマリー重ね合わせ |
+| `comparison_05deg/` 等 | 各位相モデルと1°全断面基準との位置・器厚差、RMS・最大差 |
+| `summary_05deg_MODE_SELECTION/phase_station_statistics.csv` 等 | 全位相間の器厚平均・標準偏差・最小・最大、中央線の最大位相間距離 |
+| 同フォルダの `phase_models_overlay.ply` / `.png` | 色分けした位相別モデルと、黒の1°基準モデルの重ね合わせ |
+| `phase_experiment.json` | 間隔、開始角度、予定数・有効数、使用角度・元ID、固定／再計算条件 |
+
+180平面の試行を `rim_qa.json` で確認できる1°出力が必要です。無効断面は補完せず、予定数と有効数を併記します。PLYは元入力単位、表とPNGはmmです。各セットの比較基準は同じ1°全断面モデルです。位相間ばらつきと間隔ごとの1°基準との差を併読します。位相セットや左右断面を独立標本とみなした信頼区間・有意差検定は行いません。
