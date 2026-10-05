@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PotteryRadialSections
-Version 0.10.0
+Version 0.10.1
 
 Estimate a pottery rotation axis from a series of horizontal XY sections,
 then extract longitudinal sections through that estimated Z-parallel axis.
@@ -45,7 +45,7 @@ from morphpot.section_overlay import export_section_overlay
 from morphpot.rim_standardization import export_rim_standardization
 from scipy.optimize import least_squares
 
-__version__ = "0.10.0"
+__version__ = "0.10.1"
 
 UNIT_SCALE_TO_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0}
 
@@ -1321,7 +1321,7 @@ def process(input_path: Path, unit: str, step_deg: float, start_deg: float, axis
         "section_ply_coordinate_system":"same XYZ coordinate system and unit as input mesh",
         "wall_thickness_used_for_axis":False,
         "outer_mode_note":"If axis_surface=outer, wall thickness is intentionally not used here; single or Z-positioned thickness measurements can be used later for inner-profile reconstruction and volume calculation.",
-        "tilt_note":"Center drift versus Z is diagnostic only; the model is not auto-rotated or tilt-corrected in v0.10.0.",
+        "tilt_note":"Center drift versus Z is diagnostic only; the model is not auto-rotated or tilt-corrected in v0.10.1.",
         "volume_reconstruction_implemented":True,
         "volume_calculation":volume_summary,
         "section_overlay":overlay_summary,

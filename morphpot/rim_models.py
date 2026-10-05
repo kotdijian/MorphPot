@@ -49,14 +49,17 @@ def _ray_distances(origins, normals, geometry):
 
 
 def measured_distances(mids, pairs, normal, geometries=None):
+    normals = np.broadcast_to(normal, mids.shape) if np.asarray(normal).ndim == 2 else np.asarray(normal)
+    if normals.shape != mids.shape:
+        raise ValueError("normal frames must match the individual midlines")
     outer_offsets, inner_offsets = pairs[:, 0]-mids, pairs[:, 1]-mids
-    signed_outer = np.sum(outer_offsets*normal[None], axis=2)
-    signed_inner = -np.sum(inner_offsets*normal[None], axis=2)
+    signed_outer = np.sum(outer_offsets*normals, axis=2)
+    signed_inner = -np.sum(inner_offsets*normals, axis=2)
     distances = np.stack([np.abs(signed_outer), np.abs(signed_inner)], axis=1)
     measured = np.zeros_like(distances, dtype=bool)
     if geometries is not None:
         for i, geometry in enumerate(geometries):
-            for side, direction in enumerate((normal, -normal)):
+            for side, direction in enumerate((normals[i], -normals[i])):
                 values = _ray_distances(mids[i], direction, geometry)
                 valid = np.isfinite(values)
                 distances[i, side, valid] = values[valid]
@@ -64,6 +67,15 @@ def measured_distances(mids, pairs, normal, geometries=None):
     distances[:, :, 0] = 0
     measured[:, :, 0] = False  # true tip, no separate wall-distance observation
     return distances, measured, signed_outer, signed_inner
+
+
+def individual_normal_frames(mids, pairs):
+    """Measure thickness in each profile's local frame before model synthesis.
+
+    A common model normal would measure an oblique chord through a differently
+    oriented individual wall, inflating a parallel-wall distance by 1/cos(angle).
+    """
+    return np.stack([normal_frame(curve, (pair[0]-curve)[None]) for curve, pair in zip(mids, pairs)])
 
 
 def screen_two_modes(features, *, min_profiles=20, bic_delta=10., min_fraction=.2):
@@ -147,8 +159,10 @@ def _write_model(out, stem, mids, pairs, indices, unit_to_mm, write_curves, geom
     standard = np.median(curves, axis=0)
     outer_offsets = pairs[chosen, 0]-curves
     normal = normal_frame(standard, outer_offsets)
+    measurement_normals = individual_normal_frames(curves, pairs[chosen])
+    angular_difference = np.rad2deg(np.arccos(np.clip(np.sum(measurement_normals*normal[None], axis=2), -1, 1)))
     selected_geometry = None if geometries is None else [geometries[i] for i in chosen]
-    distances, measured, signed_outer, signed_inner = measured_distances(curves, pairs[chosen], normal, selected_geometry)
+    distances, measured, signed_outer, signed_inner = measured_distances(curves, pairs[chosen], measurement_normals, selected_geometry)
     quantiles = np.percentile(distances, [2.5, 25, 50, 75, 97.5], axis=0)
     outer = standard + quantiles[2, 0, :, None]*normal
     inner = standard - quantiles[2, 1, :, None]*normal
@@ -163,15 +177,21 @@ def _write_model(out, stem, mids, pairs, indices, unit_to_mm, write_curves, geom
         writer = csv.writer(f)
         writer.writerow(["point_id", "u", "n_profiles", "mid_x_input", "mid_y_input", "outer_x_input", "outer_y_input",
                          "inner_x_input", "inner_y_input", "mid_x_mm", "mid_y_mm", "outer_x_mm", "outer_y_mm",
-                         "inner_x_mm", "inner_y_mm", "normal_x", "normal_y", "outer_ray_count", "inner_ray_count"] +
+                         "inner_x_mm", "inner_y_mm", "normal_x", "normal_y", "outer_ray_count", "inner_ray_count",
+                         "measurement_vs_model_angle_p50_deg", "measurement_vs_model_angle_max_deg"] +
                         [f"{side}_distance_p{q}_mm" for side in ("outer", "inner") for q in ("2_5", "25", "50", "75", "97_5")])
         for j in range(len(standard)):
             writer.writerow([j, j/(len(standard)-1), len(chosen), *(standard[j]/unit_to_mm),
                              *(outer[j]/unit_to_mm), *(inner[j]/unit_to_mm), *standard[j], *outer[j], *inner[j],
                              *normal[j], int(measured[:, 0, j].sum()), int(measured[:, 1, j].sum()),
+                             float(np.median(angular_difference[:,j])), float(angular_difference[:,j].max()),
                              *quantiles[:, 0, j], *quantiles[:, 1, j]])
     return {"profile_ids": chosen.tolist(), "count": len(chosen), "section_ply": f"{stem}_xy.ply",
-            "distance_definition": "normal-ray intersections from each transformed midpoint with original local wall polylines; projection of paired-wall offset if intersection unavailable",
+            "distance_definition": "individual midline normal-ray intersections with its transformed original wall polylines; projection onto the same individual normal if intersection unavailable",
+            "measurement_frame": "individual transformed midline normal",
+            "construction_frame": "standard midline normal; distance quantiles measured before this placement",
+            "measurement_vs_model_angle_p95_deg": float(np.percentile(angular_difference,95)),
+            "measurement_vs_model_angle_max_deg": float(angular_difference.max()),
             "normal_ray_count": int(measured[:, :, 1:].sum()),
             "paired_projection_fallback_count": int((~measured[:, :, 1:]).sum()),
             "opposite_sign_fraction": float(np.mean(np.r_[signed_outer[:, 1:].ravel(), signed_inner[:, 1:].ravel()] < 0)),
@@ -182,8 +202,8 @@ def _write_model(out, stem, mids, pairs, indices, unit_to_mm, write_curves, geom
 def export_section_models(out, mode, aligned, mapped_pairs, records, unit_to_mm, write_curves,
                           *, geometries=None, outlier_mad=3.5, bimodal=True, bimodal_min_profiles=20, bimodal_bic_delta=10.):
     mids, pairs = np.asarray(aligned), np.asarray(mapped_pairs)
-    normal = normal_frame(np.median(mids, axis=0), pairs[:, 0]-mids)
-    distances, measured, _, _ = measured_distances(mids, pairs, normal, geometries)
+    measurement_normals = individual_normal_frames(mids, pairs)
+    distances, measured, _, _ = measured_distances(mids, pairs, measurement_normals, geometries)
     widths = distances.sum(axis=1)
     floor = max(.05, .05*float(np.median(widths[:, 1:])))
     # Shape and wall separation both enter the profile-level screening.
@@ -209,6 +229,7 @@ def export_section_models(out, mode, aligned, mapped_pairs, records, unit_to_mm,
         filter_status = "ok"
     kept = set(inliers.tolist())
     report = {"outlier_threshold": outlier_mad, "distance_floor_mm": floor, "filter_status": filter_status,
+              "measurement_frame": "individual transformed midline normal, independent of all/inliers/A/B selection",
               "filtering_groups": filtering, "bimodality": split, "models": {},
               "restoration_annotation": "unknown; all geometrically valid observed profiles eligible",
               "sampling": "equal weight per accepted radial side, no assumed independent observations",
@@ -219,12 +240,13 @@ def export_section_models(out, mode, aligned, mapped_pairs, records, unit_to_mm,
     with (Path(out) / f"{mode}_section_distribution.csv").open("w", encoding="utf-8-sig", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["profile_id", "angle_deg", "side", "point_id", "u", "outer_distance_mm",
-                         "inner_distance_mm", "outer_method", "inner_method", "retained", "group"])
+                         "inner_distance_mm", "outer_method", "inner_method", "retained", "group",
+                         "measurement_normal_x", "measurement_normal_y"])
         for i, rec in enumerate(report["profiles"]):
             for j in range(mids.shape[1]):
                 methods = ["tip" if j == 0 else "normal_ray" if measured[i,k,j] else "paired_projection" for k in [0,1]]
                 writer.writerow([i, rec["angle_deg"], rec["side"], j, j/(mids.shape[1]-1),
-                                 *distances[i,:,j], *methods, rec["retained"], rec["group"]])
+                                 *distances[i,:,j], *methods, rec["retained"], rec["group"], *measurement_normals[i,j]])
     report["distribution_csv"] = f"{mode}_section_distribution.csv"
     if "scores" in split:
         # Empirical first-PC frequency table accompanying the mixture screen.

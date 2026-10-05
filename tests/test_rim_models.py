@@ -151,6 +151,33 @@ def test_continuous_distribution_and_single_outlier_do_not_force_two_models():
         assert report['status'] != 'two_modes'
 
 
+@pytest.mark.parametrize('scale', [1,10,1000])
+def test_individual_normals_prevent_oblique_chord_thickening(tmp_path, scale):
+    from morphpot.rim_models import measured_distances, normal_frame
+    mids, pairs, geometry = [], [], []
+    for angle in [-30,30]:
+        theta=np.deg2rad(angle)
+        rotation=np.array([[np.cos(theta),-np.sin(theta)],[np.sin(theta),np.cos(theta)]])
+        mid=np.column_stack([np.linspace(-10,10,41),np.zeros(41)]) @ rotation.T
+        normal=np.array([0,1]) @ rotation.T
+        mids.append(mid); pairs.append([mid+2*normal,mid-2*normal])
+        geometry.append({k:np.array([[-50,v],[50,v]]) @ rotation.T for k,v in [('outer',2),('inner',-2)]})
+    mids,pairs=np.asarray(mids),np.asarray(pairs)
+    common=normal_frame(np.median(mids,axis=0),pairs[:,0]-mids)
+    old,*_=measured_distances(mids,pairs,common,geometry)
+    assert old[:,:,1:].sum(axis=1).mean() == pytest.approx(4/np.cos(np.deg2rad(30)))
+    records=[dict(angle_deg=0,side='right'),dict(angle_deg=90,side='left')]
+    report=export_section_models(tmp_path,'similarity',mids,pairs,records,scale,_write_curves,geometries=geometry)
+    rows=list(csv.DictReader((tmp_path/'standard_similarity_section_all.csv').open(encoding='utf-8-sig')))
+    for row in rows[1:]:
+        assert float(row['outer_distance_p50_mm']) == pytest.approx(2)
+        assert float(row['inner_distance_p50_mm']) == pytest.approx(2)
+        assert float(row['outer_y_input'])*scale == pytest.approx(2)
+        assert float(row['measurement_vs_model_angle_p50_deg']) == pytest.approx(30)
+    assert report['models']['all']['normal_ray_count']==160
+    assert report['models']['all']['paired_projection_fallback_count']==0
+
+
 def test_model_cleanup_and_invalid_config(tmp_path):
     from test_rim_standardization import source_segments
     args = (tmp_path, [(0,source_segments(0)),(90,source_segments(90))], (3,-4),1,'mm')
