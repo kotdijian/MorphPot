@@ -16,6 +16,8 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 
 ## 目次
 
+- [全体モデルの寸法・器厚検証](#whole-vessel-dimension-validation)
+
 - [全体代表モデルの独立検証スクリプト](#whole-vessel-validation)
 - [個体の全体代表モデル（独立CLI）](#whole-vessel-model)
 - [PotteryRadialSections 操作ガイド](#radial-sections-guide)
@@ -703,3 +705,50 @@ python pottery_whole_validation.py whole_model --output-dir whole_validation_tri
 | `validation.json` | 条件・有効数・定義・限界 |
 
 training評価は保存済みの補間輪郭、holdout評価は元メッシュの新しい交線を用います。未使用方位も同じ元メッシュを使い、軸は固定するため、独立した実物計測による精度検証や軸推定を含む総合検証ではありません。ランドマーク対応、部位別区分、軸感度、開始位相・角度間隔の一括実験は未実装です。最小距離の方式を自動的に最良と判定せず、指標ごとの変化を比較します。
+
+
+<a id="whole-vessel-dimension-validation"></a>
+
+## 全体モデルの寸法・器厚検証（WholeDimensionValidation 0.1.0-dev）
+
+`pottery_whole_dimension_validation.py` を追加しました。同じフォルダの `pottery_whole_validation.py` を共通処理として使用します。この2ファイルと既存requirementsで動作し、morphpotパッケージは不要です。入力はWholeModelの出力フォルダです。元モデル・メッシュは変更しません。
+
+```bash
+python pottery_whole_dimension_validation.py \
+  "0015Jinmen_whole_model_v0.1.0/whole_model" \
+  --output-dir whole_dimension_validation --interval-mm 1
+
+# 未使用角度も検証（元PLYのSHA-256を確認、単位と解析軸を継承）
+python pottery_whole_dimension_validation.py \
+  "0015Jinmen_whole_model_v0.1.0/whole_model" \
+  --output-dir whole_dimension_validation_holdout \
+  --input-mesh "../PotteryVolumeCalculator/0015Jinmen_small.ply" \
+  --holdout-offset-deg 2.5 --interval-mm 1
+```
+
+| 測定項目 | 定義 |
+| --- | --- |
+| 口唇径 `lip_diameter_mm` | 最高口唇点の半径×2。各半断面の直径換算値で、対向半断面を結んだ実径や内側開口径ではない |
+| 最大径 | 外面最大半径×2 |
+| 最大径の高さ | 外面最小Zから最大半径点まで。最大点が複数ならそのZ範囲の中点を使用、範囲も保存 |
+| 器高 | 内外面の最高Z−外面最小Z |
+| 器厚 | 外側底部軸端点→口唇の外面接線に対する内向き法線と、内面の最初の正方向交点までの距離 |
+
+器厚は各元断面自身の法線で測り、モデルの法線を元断面へ一律に適用しません。接線の推定幅は `--tangent-window-mm`（既定2mm）、外面の測点間隔は `--interval-mm`（既定1mm）。端点から弧長 `--endpoint-margin-mm`（既定2mm）以内は除外します。複数交点は最初を使用してフラグを付け、未取得は欠測とします。内面法線との入射角のcosが0.3未満となる浅い交差も器厚から除外し、交点までの生距離・cos値を別列に保持します。欠測区間を跨ぐ補間は行いません。
+
+モデルと元断面の器厚比較は、底部軸端点から口唇までの正規化外面弧長で対応付けます。同じ絶対弧長や形態学的ランドマークでの比較ではありません。測点ごとに有効半断面数、平均・中央値・母標準偏差・最小・最大、モデル−実測中央値を保存します。分布は受理断面の等重みで、断面単位の外れ値除去はしません。中央値・平均・座標ごとの両側10%トリム平均の3モデルを比較します。
+
+| 出力 | 内容 |
+| --- | --- |
+| `model_dimensions.csv` | 集約方式別のモデル寸法 |
+| `source_dimensions.csv` | 方位別の元断面寸法 |
+| `dimension_summary.csv` | 寸法ごとの断面間統計とモデル−中央値 |
+| `METHOD_model_thickness.csv` | モデルの器厚測点、交点、欠測・複数交点フラグ |
+| `source_thickness.csv` | 各元断面の器厚と測点座標、QA |
+| `thickness_comparison.csv` | 正規化弧長対応による実測器厚分布とモデル差 |
+| `training_dimensions.png`／`holdout_dimensions.png` | 方位別寸法とモデルの比較 |
+| `training_thickness.png`／`holdout_thickness.png` | モデル器厚、実測中央値・最小〜最大の比較 |
+| `dimension_validation.json` | 条件・定義・有効数・限界 |
+| `holdout_section_qa.csv` | 元PLY指定時の未使用角度の採否・理由 |
+
+出力先は元フォルダ外の空フォルダを指定します。`--no-plots`でCSVのみ生成できます。全数の最小〜最大は信頼区間ではありません。法線が遠方の内面へ達する場合があり、複数交点や極端な器厚は座標・フラグと合わせて確認します。真の内側開口径の同定、口唇そのものの器厚、部位ランドマーク、復元面の分離、軸感度は未対応です。
