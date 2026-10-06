@@ -14,9 +14,47 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 
 本リポジトリは開発版であり、全資料での精度検証を完了した正式安定版ではありません。
 
+## 目次
+
+- [PotteryRadialSections 操作ガイド](#radial-sections-guide)
+- [1. 入力モデルと環境を準備する](#setup)
+- [2. 基本操作：器軸・断面・容量をまとめて計算する](#basic-usage)
+- [3. 目的に合わせて設定する](#purpose-settings)
+- [4. 主なオプション](#options)
+- [5. 出力と確認の順序](#outputs)
+- [6. エラーが出た場合・詳細ヘルプ](#troubleshooting)
+- [7. 口縁部中央線を右側へ揃え、個体内標準モデルを作る（v0.10.0）](#rim-midline)
+- [8. 抽出元の断面と中間点を重ねて検証する（v0.8.2）](#source-section-overlay)
+- [9. 内外面を含む標準断面モデル（v0.9.0）](#standard-section-model)
+- [10. 変換別の出力構成・終端モード・形状候補（v0.10.0）](#standardization-modes)
+- [Similarityとaffineの違い](#similarity-vs-affine)
+- [フォルダとファイル群](#standardization-files)
+- [CLIモードと検出条件](#end-detection)
+- [現時点の未実装と次段階](#next-development)
+- [11. 標準断面の距離測定の再検証（v0.10.1）](#thickness-measurement)
+- [12. 口縁部の検証版（現行 RimValidation 0.2.2-dev）](#rim-validation)
+- [13. 全断面サマリーと1°出力による開始角度・間隔検証（RimValidation 0.2.0-dev）](#phase-validation)
+- [14. 間隔依存性の直接比較画像（RimValidation 0.2.1-dev）](#interval-dependence)
+- [15. 曲率・旋回角の比較（RimValidation 0.2.2-dev）](#curvature-turning)
+- [16. 検証プログラムの選択と現在の検証結果（2026-10-06 JST）](#validation-programs)
+
+検証プログラムの外部参照には、以下の固定URLを使用できます。バージョン表記を含む見出しが変わっても同じアンカーを使用します。
+
+- [検証プログラム一覧・現在の結果](https://github.com/kotdijian/MorphPot/blob/main/README.md#validation-programs)
+- [器厚・元断面との比較（validate／compare／sweep）](https://github.com/kotdijian/MorphPot/blob/main/README.md#rim-validation)
+- [開始位置・角度間隔の検証（phases）](https://github.com/kotdijian/MorphPot/blob/main/README.md#phase-validation)
+- [間隔依存性の画像追加](https://github.com/kotdijian/MorphPot/blob/main/README.md#interval-dependence)
+- [曲率・旋回角の追加検証](https://github.com/kotdijian/MorphPot/blob/main/README.md#curvature-turning)
+
+詳細な検証方法・結果は [ValidationReport.md](ValidationReport.md) を参照してください。
+
+<a id="radial-sections-guide"></a>
+
 ## PotteryRadialSections 操作ガイド
 
 `pottery_radial_sections.py`（v0.10.1）は、水平断面の楕円中心から器軸のXY位置を推定し、その軸を通る放射状の縦断面を抽出します。断面からの容量計算と、右側基準の口縁部中央線の抽出・個体内標準化を実装しています。現在はCLIで操作します。
+
+<a id="setup"></a>
 
 ### 1. 入力モデルと環境を準備する
 
@@ -33,6 +71,8 @@ python -m pip install -r requirements.txt
 ```
 
 Windowsでは環境の有効化を `venv\Scripts\Activate.ps1` に読み替えてください。この断面解析にはGUI用の追加依存は不要です。
+
+<a id="basic-usage"></a>
 
 ### 2. 基本操作：器軸・断面・容量をまとめて計算する
 
@@ -51,6 +91,8 @@ python MorphPot.py sections "/path/to/pot001_rev.ply" --unit m
 正規化済みPLYでも単位がmmとは限りません。`--unit` は入力単位の宣言であり、姿勢Transformを再適用するオプションではありません。`--z-step-mm` など末尾が `-mm` の間隔は、入力単位にかかわらずmmで指定します。
 
 既定設定では、水平断面20箇所から内面の楕円中心を求め、外れ値除去後の平均XYを器軸位置とします。縦断面の角度間隔は30°で、全断面6方向・半断面12方向を出力します。容量は4方式を計算し、参照用PNGも生成します。
+
+<a id="purpose-settings"></a>
 
 ### 3. 目的に合わせて設定する
 
@@ -90,6 +132,8 @@ python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode 
 
 これらは断面profileによる容量推定です。voxel法は別の `MorphPot.py volume` で実行します。断面容量には内面・底・口縁の取得状態が影響するため、方式間の差と結果の `status` を確認してください。
 
+<a id="options"></a>
+
 ### 4. 主なオプション
 
 | オプション | 既定値 | 用途 |
@@ -111,6 +155,8 @@ python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode 
 | `--no-section-overlay` | 無効 | XY重ね合わせPLYと中央値ポリラインの自動出力を省略 |
 
 角度間隔を細かくすると断面数が増えます。点群間隔や容量の高さ刻みを小さくすると、処理時間・出力サイズが増えます。入力メッシュ以上の細部が復元されるわけではありません。
+
+<a id="outputs"></a>
 
 ### 5. 出力と確認の順序
 
@@ -148,6 +194,8 @@ python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode 
 
 `--no-visualization` 指定時はPNGを生成しないため、CSV・PLYで確認します。古い出力を残したフォルダでは、過去のPNGなどが残る場合があります。
 
+<a id="troubleshooting"></a>
+
 ### 6. エラーが出た場合・詳細ヘルプ
 
 | 状況 | 確認すること |
@@ -169,6 +217,8 @@ python pottery_radial_sections.py --help
 ```bash
 python pottery_radial_sections.py "/path/to/pot001_rev.ply" --unit m --angle-step 30
 ```
+
+<a id="rim-midline"></a>
 
 ### 7. 口縁部中央線を右側へ揃え、個体内標準モデルを作る（v0.10.0）
 
@@ -248,6 +298,8 @@ v0.8.1では、高さの逆行による中央線生成失敗を修正しまし�
 **次段階の個体間解析：** 無次元座標はサイズを除いたProcrustes比較の入力候補です。複数個体の回転位置合わせ、一般化Procrustes解析、一致度・変異の集計はまだ実装していません。対応点数だけでなく、口唇・変化点・比較終端の相同性を確認してから比較します。完成個体から成形・乾燥・焼成の原因を分離したり、焼成前の形を復元したりする処理ではありません。
 
 
+<a id="source-section-overlay"></a>
+
 ### 8. 抽出元の断面と中間点を重ねて検証する（v0.8.2）
 
 口縁部解析時に `rim_standardization/` へ自動出力します。追加オプションは不要です。
@@ -266,6 +318,8 @@ v0.8.1では、高さの逆行による中央線生成失敗を修正しまし�
 
 中央線と対応点は共通の中央線弧長で補間します。v0.8.1の切り出し後の再標本化から変更したため、途中の標本位置には微小な差が出る場合があります。標準中央値線は複数輪郭の集約結果なので、単一の元断面の中点としては解釈しません。
 
+
+<a id="standard-section-model"></a>
 
 ### 9. 内外面を含む標準断面モデル（v0.9.0）
 
@@ -302,7 +356,11 @@ python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --angle-step 5
 この段階の標準断面は口縁部の2Dモデルです。個体間Procrustes解析、標準3D回転メッシュ、表面セグメンテーション・アノテーションは未実装です。次段階ではfragment boundaryの拡張と表面ラベルから、取得断面をオリジナル・復元等で分けて再集約します。
 
 
+<a id="standardization-modes"></a>
+
 ### 10. 変換別の出力構成・終端モード・形状候補（v0.10.0）
+
+<a id="similarity-vs-affine"></a>
 
 #### Similarityとaffineの違い
 
@@ -319,6 +377,8 @@ python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --angle-step 5
 
 各方式の変換を元内外輪郭にも適用して中央線・距離分布を集約するため、外れ値やA/B判定の結果も方式ごとに異なる場合があります。いずれも個体内標準化であり、個体間のサイズ除去Procrustes解析はまだ実装していません。
 
+<a id="standardization-files"></a>
+
 #### フォルダとファイル群
 
 | 保存先 | ファイル群と役割 |
@@ -334,6 +394,8 @@ python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --angle-step 5
 正式な綴りは`affine`です。旧版の直下にあった方式別の生成ファイルは再実行時に削除し、サブフォルダで再生成します。無効化・検出失敗時にも所有する旧生成ファイルを消去し、利用者の別名ファイルは保持します。v0.9.0までの直下パスを読む外部スクリプトは変更してください。
 
 候補点PLYの色：橙=半径方向の停滞・反転、紫=水平移行、黒=新始点、緑=バッファーを加えた最終比較終端。PLYは入力単位の共通未変換XY平面です。CSVの`stage=wall_screening`は内外面候補座標・弧長の平均で、始点基準は元輪郭の最高点分割です。`stage=final_midline`は端部延長で決めた新始点からの中央線候補・弧長です。二段階の候補は厳密な同一点ではありません。profile_indexはrim_qa.jsonの行順で、採用中央線のIDは同JSON内のaccepted_profile_idです。
+
+<a id="end-detection"></a>
 
 #### CLIモードと検出条件
 
@@ -360,10 +422,14 @@ GUIは不要です。候補PLYとQAを既存ビューアで確認します。`--
 
 支持割合は両面を処理できた半断面数に対する割合で、除外前の幾何候補も含みます。候補弧長の中央値・IQR、高さ位置のIQR、支持方位を記録します。校正された確率や独立標本の信頼区間ではありません。自動推奨は幾何的な処理方針であり、個体間比較区間の考古学的な相同性を保証しません。
 
+<a id="next-development"></a>
+
 ### 現時点の未実装と次段階
 
 丸底などで水平化が短い場合、片面だけに候補がある場合、複数輪郭や不連続輪郭は判定保留・除外となり得ます。既定閾値は実資料で校正中です。CLIで同じ終端方針を明示し、比較範囲を確認してください。GUIによる候補選択・終端編集、オリジナル／復元表面のセグメンテーションとアノテーション、個体間Procrustes解析、標準断面の3D回転モデルは今後の実装です。
 
+
+<a id="thickness-measurement"></a>
 
 ### 11. 標準断面の距離測定の再検証（v0.10.1）
 
@@ -377,6 +443,8 @@ v0.10.0までは標準中央線の法線を各個別中央点に置いて距離�
 
 `*_pair_connectors_xy.ply`は内外対応点を結ぶ線であり、元輪郭そのものではありません。口唇の新始点から支持位置までは対応点の直線補間を含むため、その外周と、元輪郭法線交点で再構成した丸い端部は一致しないことがあります。標準断面の肥厚を確認する際は、同じ方式サブフォルダの`*_source_outer_xy.ply`／`*_source_inner_xy.ply`も重ねて確認してください。比較終端を結ぶ人工切断線は外面・内面別PLYで除いて確認できます。多方位での局所方向、対応弧長、交点の枝選択の妥当性は継続検証対象です。
 
+
+<a id="rim-validation"></a>
 
 ### 12. 口縁部の検証版（現行 RimValidation 0.2.2-dev）
 
@@ -417,6 +485,8 @@ python pottery_rim_validation.py compare run_30deg run_15deg run_5deg \
 この比較はモデル構築に利用した同じメッシュ交線に対する記述的検証です。独立した実物計測に対する精度評価ではありません。高密度分割を正解とはみなさず、変化量を出力します。「変わらない」の許容幅は測定分解能・研究目的から別途指定する必要があります。autoで終端方針が変わった場合は分割数だけの比較にならないため、設定を確認して同じ方針で再実行します。
 
 
+<a id="phase-validation"></a>
+
 ### 13. 全断面サマリーと1°出力による開始角度・間隔検証（RimValidation 0.2.0-dev）
 
 `validate` は各方式・選択群のフォルダに `profile_all_overlay.ply` と `profile_all_overlay.png` を追加します。選択された全半断面の元内外面（灰）と標準モデルの内外面（赤）を同じ座標に重ねます。個別の `profile_NNN_overlay_xy.ply` / `.png` も補足資料用に引き続き生成します。`--no-plots` を指定した場合だけPNGを省きます。
@@ -449,6 +519,8 @@ python pottery_rim_validation.py phases 0015Jinmen_small_RadialSections_1deg \
 180平面の試行を `rim_qa.json` で確認できる1°出力が必要です。無効断面は補完せず、予定数と有効数を併記します。PLYは元入力単位、表とPNGはmmです。各セットの比較基準は同じ1°全断面モデルです。位相間ばらつきと間隔ごとの1°基準との差を併読します。位相セットや左右断面を独立標本とみなした信頼区間・有意差検定は行いません。
 
 
+<a id="interval-dependence"></a>
+
 ### 14. 間隔依存性の直接比較画像（RimValidation 0.2.1-dev）
 
 `phases` の終了時に、2種類以上の間隔を比較し、PNGが有効な場合は `interval_dependence/interval_dependence_similarity_all.png` と `interval_dependence_affine_all.png` を自動出力します。選択群がinliers等なら末尾の名前が変わります。
@@ -469,6 +541,8 @@ python pottery_rim_interval_plot.py phase_validation \
 
 異なる基準モデルや基準断面数のCSVを混ぜると停止します。全間隔で共通する記録済み測点のみ描画し、欠測はゼロに置き換えません。短い位相モデルがあると測点ごとの有効位相数は減る場合があるため、詳細は元の比較CSVとphase_station_statistics.csvで確認します。共通測点以外の補間・外挿は行いません。図は間隔を変えたときの変化量を表示し、「安定」の許容差や統計的有意差を自動判定しません。
 
+
+<a id="curvature-turning"></a>
 
 ### 15. 曲率・旋回角の比較（RimValidation 0.2.2-dev）
 
@@ -503,6 +577,8 @@ python pottery_rim_curvature_plot.py phase_validation \
 
 端部は片側の多項式当てはめになるため、窓幅の半分を灰色表示・フラグ付けし、曲率ピークと曲率RMSの評価から除外します。総旋回角は共通区間の始点・終点の推定も含むため端部条件に影響されます。曲率は平滑化幅に敏感で、補間は元中央線の情報量を増やしません。2mm・4mmなどの幅でも比較してください。最大曲率比は区間内の最大値同士の比で、同じ解剖学的位置のピーク同士を自動対応付けした値ではありません。モデルの湾曲消失を自動判定しません。
 
+
+<a id="validation-programs"></a>
 
 ### 16. 検証プログラムの選択と現在の検証結果（2026-10-06 JST）
 
