@@ -16,6 +16,8 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 
 ## 目次
 
+- [口縁付近の器厚交点・対応の診断](#whole-thickness-diagnostics)
+
 - [全体モデルの寸法・器厚検証](#whole-vessel-dimension-validation)
 
 - [全体代表モデルの独立検証スクリプト](#whole-vessel-validation)
@@ -752,3 +754,51 @@ python pottery_whole_dimension_validation.py \
 | `holdout_section_qa.csv` | 元PLY指定時の未使用角度の採否・理由 |
 
 出力先は元フォルダ外の空フォルダを指定します。`--no-plots`でCSVのみ生成できます。全数の最小〜最大は信頼区間ではありません。法線が遠方の内面へ達する場合があり、複数交点や極端な器厚は座標・フラグと合わせて確認します。真の内側開口径の同定、口唇そのものの器厚、部位ランドマーク、復元面の分離、軸感度は未対応です。
+
+
+<a id="whole-thickness-diagnostics"></a>
+
+## 口縁付近の器厚交点・対応の診断（WholeThicknessDiagnostics 0.1.0-dev）
+
+`pottery_whole_thickness_diagnostics.py` は保存済みWholeModelから追加分だけを実行するCLIです。モデルを再生成せず、3集約モデルと各実測半断面で測定線を可視化します。既存の `morphpot.rim_standardization.make_midline` を使用するため、MorphPotリポジトリ全体と既存requirementsが必要です。
+
+```bash
+python pottery_whole_thickness_diagnostics.py \
+  "0015Jinmen_whole_model_v0.1.0/whole_model" \
+  --output-dir whole_thickness_diagnostics \
+  --rim-length-mm 40 --pair-window-mm 8 --interval-mm 1
+
+# 未使用角度も追加
+python pottery_whole_thickness_diagnostics.py \
+  "0015Jinmen_whole_model_v0.1.0/whole_model" \
+  --output-dir whole_thickness_diagnostics_holdout \
+  --input-mesh "../PotteryVolumeCalculator/0015Jinmen_small.ply" \
+  --holdout-offset-deg 2.5 --rim-length-mm 40 --pair-window-mm 8
+```
+
+| 方法・色 | 内容 |
+| --- | --- |
+| outer_unrestricted・橙 | 既存の外面法線測定。離れた位置への生の測定線も保持 |
+| outer_constrained・青 | 最高口唇点からの内外面弧長差が指定窓内の交点だけを採用 |
+| rim_midline・緑 | 既存DTW・中央線延長始点アルゴリズムで局所中央線を抽出し、各中央線の法線で両壁を測定 |
+| 灰 | 変形していない元の内外面断面 |
+
+`--rim-length-mm` は既存中央線処理のmanual比較範囲を指定（既定40mm）。全体輪郭の外面最高口唇点からも同じ長さの区間を診断します。中央線の始点は延長交点であり最高口唇点とは異なるため、比較CSVでは外面上の口唇からの弧長へ対応させます。相似・アフィン変換をかけず、元のr,zで測ります。既存の標準化済み口縁出力をそのまま取り込む方式ではありません。
+
+外面法線の制約は `abs(outer_lip_arc−inner_lip_arc) <= pair_window_mm`。中央線法線では、DTWで対応した各壁の位置から指定窓内にある交点だけを採用します。窓の既定8mmは検証用パラメータで、4・8・12mmなど別出力先で感度を確認してください。交点なし・浅い入射cos<0.3は欠測とし、中央線始点は厚さ観測から除外します。中央線のペア投影値は別列に残しますが、欠測厚さの代用にはしません。中央線処理が失敗した断面も法線結果は残し、理由をQAへ記録します。
+
+| 出力 | 内容 |
+| --- | --- |
+| `models/median/`等 | 各モデルの測定CSV、断面＋交点線分PLY、局所重ね合わせと器厚比較PNG |
+| `training/angle_XXX.XXX/` | 各実測半断面の同じ出力 |
+| `holdout/angle_XXX.XXX/` | 元PLY指定時の未使用角度の同じ出力 |
+| `training_all_rays_overlay.png`／`…_xy.ply` | 全実測断面と測定線の重ね合わせ（models・holdoutも同様） |
+| `all_measurements.csv` | 全測点の方法・厚さ・生距離・内外交点座標・対応弧長差・入射cos・QA |
+| `model_method_comparison.csv` | 共通外面弧長位置でのモデル測定3方式の比較。欠測区間を補間・外挿しない |
+| `measurement_summary.csv` | 方法別の有効数・最大厚・対応窓超過数 |
+| `midline_qa.csv` | 局所中央線の採否・既存始点診断 |
+| `thickness_diagnostics.json` | 条件・定義・限界 |
+
+PLYはX=半径、Y=入力高さ、Z=0で入力単位。CSV・PNGはmmです。PNGの線分には交点を取得したが器厚から除外した線も含み、CSVのstatusで判別します。出力先は元モデルフォルダ外の空フォルダを指定。`--no-plots`でもCSV・PLYは生成します。異なる法線方向の距離は同じ定義の厚さではなく、方法間差をすべて誤差と判断しません。
+
+実データの中央値モデルでは、無制約24.346mmの線が外面口唇弧長2.685mmから内面22.935mmへ到達し、対応弧長差20.250mmでした。8mm窓ではこの交点を除外し、局所区間の最大有効値は制約外面法線6.724mm、中央線法線6.499mm。これは真の器厚の確定ではなく、遠い内面との交差が急増に寄与していたことの診断です。
