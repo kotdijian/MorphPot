@@ -16,6 +16,7 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 
 ## 目次
 
+- [全体代表モデルの独立検証スクリプト](#whole-vessel-validation)
 - [個体の全体代表モデル（独立CLI）](#whole-vessel-model)
 - [PotteryRadialSections 操作ガイド](#radial-sections-guide)
 - [1. 入力モデルと環境を準備する](#setup)
@@ -665,3 +666,40 @@ python pottery_whole_model.py "0015Jinmen_small.ply" --unit m --output-dir whole
 提供された `0015Jinmen_small(1).ply`（350,070頂点・700,000面、m）で生成しました。入力は重複頂点統合後に開放境界0本・非多様体エッジ1本。5°の72半断面中66本を採用し、40°／220°、85°／265°、160°／340°は複数輪郭のため除外しました。0.5mm設定の代表器高278.650mm、最大径227.546mm、メッシュ249,482頂点・498,960面。出力はwatertightかつ面向き整合です。0.25mm設定では最大径227.660mm、器壁材料体積の変化約0.0077%。これはこの個体での補間密度比較で、角度間隔依存性や器厚精度の保証ではありません。JSONの材料体積は土器の保持容量ではありません。
 
 軸対称化で消える方位変異は元断面と偏差に残します。復元面とオリジナル面の識別は未導入です。把手、台脚、複数材料輪郭、底部軸上の穴などは現方式の対象外または除外対象です。次段階は部位の対応、全体構成特徴、個体間比較と、未使用断面・独立実測による評価です。
+
+
+<a id="whole-vessel-validation"></a>
+
+## 全体代表モデルの独立検証（WholeValidation 0.1.0-dev）
+
+`pottery_whole_validation.py` はこの1ファイルだけで使える検証CLIです。MorphPotパッケージをimportせず、標準ライブラリ・NumPy・SciPyで保存済み出力を検証します。未使用方位のメッシュ抽出にはtrimesh・networkx、PNG生成にはMatplotlibが必要です。既存requirementsで実行できます。全体モデルの生成CLI、口縁部検証CLIとは別立てです。
+
+```bash
+# 保存済み全体モデルだけで中央値・平均・トリム平均を比較
+python pottery_whole_validation.py whole_model --output-dir whole_validation --interval-mm 1
+
+# 同じ元PLYから未使用方位を抽出（5°モデルなら既定は2.5°の開始オフセット）
+python pottery_whole_validation.py whole_model --output-dir whole_validation_holdout --input-mesh "0015Jinmen_small.ply" --holdout-offset-deg 2.5 --interval-mm 1
+
+# 集約方式・トリム率・検証密度を指定
+python pottery_whole_validation.py whole_model --output-dir whole_validation_trim --methods median trimmed_mean --trim-fraction 0.1 --interval-mm 0.5 --no-plots
+```
+
+入力は `whole_model.json` と `profile_distribution.npz` を持つWholeModel出力フォルダです。元PLYを指定した場合、SHA-256が生成時と一致することを確認してmetadataの単位・解析軸を使います。未使用方位は元の試行グリッドと重複すると拒否します。既定の方位間隔は生成時と同じ、開始オフセットはその半分です。`--holdout-angle-step` で変更できます。閉じた単一の半断面のみ採用し、有効率80%未満は停止します。元メッシュや元モデルを変更せず、出力は別の空フォルダを指定します。
+
+中央値・算術平均・トリム平均は同じ内外輪郭の正規化弧長対応点で再計算します。`--trim-fraction 0.1` は各座標分布の下側・上側それぞれ10%を除く指定で、断面単位の外れ値除外ではありません。座標ごとに除く断面は異なる場合があります。平均／トリム平均の曲線は比較記述子であり、交差・3D閉鎖性を検証した代替メッシュとしては出力しません。
+
+距離は半径–高さ平面における点→輪郭線分の正確な最近傍距離で、内面・外面を分けて測ります。比較点を一定mm弧長で置き、平均・RMS・中央値・p95・最大を報告します。半径×弧長区間で回転面の面積を近似した重み付き平均・RMSも併記します。方位ごとの表にはモデル→個別輪郭の逆方向RMS・p95、双方向最大距離も記録します。CloudCompareの符号付きC2Mや器厚の測定ではありません。距離の向きと表面の指定を揃えて評価します。
+
+| ファイル／フォルダ | 内容 |
+| --- | --- |
+| `distance_summary.csv` | 学習利用断面／未使用方位 × 集約方式 × 内面・外面・合算の距離統計 |
+| `aggregation_comparison.csv` | 各方式の対応点座標、中央値との差r,zと距離 |
+| `comparison_models.npz` | 3方式の内外輪郭、mm |
+| `aggregation_models_overlay.png` | 3方式の輪郭重ね合わせ |
+| `training/median/` 等 | 利用断面との測点距離CSV、方位別統計CSV、全断面重ね合わせPNG／PLY |
+| `holdout/median/` 等 | 未使用方位との同じ比較出力。元PLY指定時のみ |
+| `holdout_section_qa.csv` | 未使用方位の採否・理由 |
+| `validation.json` | 条件・有効数・定義・限界 |
+
+training評価は保存済みの補間輪郭、holdout評価は元メッシュの新しい交線を用います。未使用方位も同じ元メッシュを使い、軸は固定するため、独立した実物計測による精度検証や軸推定を含む総合検証ではありません。ランドマーク対応、部位別区分、軸感度、開始位相・角度間隔の一括実験は未実装です。最小距離の方式を自動的に最良と判定せず、指標ごとの変化を比較します。
