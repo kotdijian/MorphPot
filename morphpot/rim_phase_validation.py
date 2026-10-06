@@ -160,4 +160,7 @@ def run_phase_experiment(root, output, *, steps=(5,10,15), phases=None, interval
     if plots and len(steps)>1:
         from pottery_rim_interval_plot import create_interval_plots
         create_interval_plots(out,steps=list(steps),modes=modes,selection=selection)
+    if plots:
+        from pottery_rim_curvature_plot import create_curvature_outputs
+        create_curvature_outputs(out,reference_dir=source["root"],steps=list(steps),phases=phases,modes=modes,selection=selection)
     return manifest

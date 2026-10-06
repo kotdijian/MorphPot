@@ -468,3 +468,37 @@ python pottery_rim_interval_plot.py phase_validation \
 `pottery_rim_interval_plot.py` は独立スクリプトです。この1ファイルとNumPy・Matplotlibだけで動作し、morphpotパッケージや入力メッシュは不要です。必要な入力は `comparison_05deg/similarity_all_division_comparison.csv` 等。`--steps` を省くと比較フォルダを検出します。既定は両方式、`--selection` はall/inliers/A/B、`--dpi` の既定は180。生成物はPNGのみです。既存CSV・モデルには書き込みません。
 
 異なる基準モデルや基準断面数のCSVを混ぜると停止します。全間隔で共通する記録済み測点のみ描画し、欠測はゼロに置き換えません。短い位相モデルがあると測点ごとの有効位相数は減る場合があるため、詳細は元の比較CSVとphase_station_statistics.csvで確認します。共通測点以外の補間・外挿は行いません。図は間隔を変えたときの変化量を表示し、「安定」の許容差や統計的有意差を自動判定しません。
+
+
+### 15. 曲率・旋回角の比較（RimValidation 0.2.2-dev）
+
+標準中央線の曲がり方そのものを比較するPNG・測点CSV・集計CSV・条件JSONを追加しました。phasesの画像生成時に `curvature_turning/` へ自動出力します。既存結果に追加分だけを生成する場合は、独立スクリプトを実行します。モデルの再計算・メッシュ抽出は行いません。
+
+```bash
+python pottery_rim_curvature_plot.py phase_validation --steps 5 10 15
+
+# 全間隔を開始角度0〜4°の共通5セットに揃える場合
+python pottery_rim_curvature_plot.py phase_validation \
+  --steps 5 10 15 --phases 0 1 2 3 4 --output-dir curvature_common5
+
+# 1°基準の保存場所が変わった場合は明示的に指定
+python pottery_rim_curvature_plot.py phase_validation \
+  --reference-dir ../PotteryVolumeCalculator/0015Jinmen_small_RadialSections_1deg
+```
+
+必要なのは既存phase_validationの `phase_experiment.json`、各セットの標準断面CSV（mid_x_mm・mid_y_mm）、元の1°出力の標準断面CSVです。参照先はmanifestから取得し、移動・別環境では `--reference-dir` で指定します。`pottery_rim_curvature_plot.py` はPython・NumPy・SciPy・Matplotlibだけで動作する単独ファイルです。
+
+各方式・選択群について次を出力します。既定は両方式・allで、`--mode` / `--selection` に対応します。
+
+| ファイル | 内容 |
+| --- | --- |
+| `curvature_turning_similarity_all.png`（affineも同様） | 上段：始点からの接線旋回角、符号付き曲率、累積絶対旋回角。下段：それぞれの1°基準との差 |
+| `…_stations.csv` | 各間隔・開始角度・測点の曲率、符号付き／絶対旋回角、基準との差、端部フラグ |
+| `…_summary.csv` | 共通区間の総旋回角、最大絶対曲率と位置、基準に対するピーク比、内部区間の曲率RMS差 |
+| `curvature_turning_MODE_SELECTION.json` | 曲率・旋回角の定義、平滑化条件、共通終端、制約 |
+
+黒線は1°基準、色線は位相間中央値、帯は最小〜最大で信頼区間ではありません。全間隔・全位相で共通する弧長区間を使います。
+
+**測定方法**：各中央線を同じ弧長グリッド（既定0.25mm）へ補間し、同じ物理幅（既定2mm）の3次Savitzky–Golay局所多項式から1・2階微分を求めます。`--grid-mm` / `--smooth-mm` で変更でき、使用した実効幅はJSONに記録します。曲率は `(x'y''−y'x'')/(x'^2+y'^2)^(3/2)`、単位は1/mm。正負は始点から胴側へ進む向きの反時計回り／時計回りです。符号付き旋回角はunwrapした接線角から始点角を引き、絶対旋回角は各グリッド間の接線角変化の絶対値を累積します。逆向きの湾曲が相殺されないよう、両方を報告します。
+
+端部は片側の多項式当てはめになるため、窓幅の半分を灰色表示・フラグ付けし、曲率ピークと曲率RMSの評価から除外します。総旋回角は共通区間の始点・終点の推定も含むため端部条件に影響されます。曲率は平滑化幅に敏感で、補間は元中央線の情報量を増やしません。2mm・4mmなどの幅でも比較してください。最大曲率比は区間内の最大値同士の比で、同じ解剖学的位置のピーク同士を自動対応付けした値ではありません。モデルの湾曲消失を自動判定しません。

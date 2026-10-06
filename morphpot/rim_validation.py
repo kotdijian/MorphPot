@@ -11,7 +11,7 @@ import numpy as np
 from .rim_models import _ray_distances
 from .rim_standardization import arc_positions, sample_curve, _write_curves
 
-VERSION = "0.2.1-dev"
+VERSION = "0.2.2-dev"
 
 
 def read_curves(path, scale):
