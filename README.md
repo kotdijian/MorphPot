@@ -10,7 +10,7 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 
 石器の平面形態・連続断面は[LithMorph](https://github.com/kotdijian/LithMorph)で開発します。
 
-実装範囲、モジュール構成、開発計画、検証結果は[DevelopmentReport](DevelopmentReport.md)を参照してください。移管元は[SOURCE_PROVENANCE.json](SOURCE_PROVENANCE.json)に記録しています。
+実装範囲、モジュール構成、開発計画は[DevelopmentReport](DevelopmentReport.md)、口縁部の検証方法・結果・残る課題は[検証報告](ValidationReport.md)を参照してください。移管元は[SOURCE_PROVENANCE.json](SOURCE_PROVENANCE.json)に記録しています。
 
 本リポジトリは開発版であり、全資料での精度検証を完了した正式安定版ではありません。
 
@@ -378,7 +378,7 @@ v0.10.0までは標準中央線の法線を各個別中央点に置いて距離�
 `*_pair_connectors_xy.ply`は内外対応点を結ぶ線であり、元輪郭そのものではありません。口唇の新始点から支持位置までは対応点の直線補間を含むため、その外周と、元輪郭法線交点で再構成した丸い端部は一致しないことがあります。標準断面の肥厚を確認する際は、同じ方式サブフォルダの`*_source_outer_xy.ply`／`*_source_inner_xy.ply`も重ねて確認してください。比較終端を結ぶ人工切断線は外面・内面別PLYで除いて確認できます。多方位での局所方向、対応弧長、交点の枝選択の妥当性は継続検証対象です。
 
 
-### 12. 口縁部の検証版（RimValidation 0.1.0-dev）
+### 12. 口縁部の検証版（現行 RimValidation 0.2.2-dev）
 
 公開版に向けた検証専用CLI `pottery_rim_validation.py` を追加しました。RadialSections本体はv0.10.1のままです。入力は既に生成した断面出力フォルダ、または分割数検証用のメッシュです。元のPLYへ姿勢Transformを再適用しません。
 
@@ -502,3 +502,39 @@ python pottery_rim_curvature_plot.py phase_validation \
 **測定方法**：各中央線を同じ弧長グリッド（既定0.25mm）へ補間し、同じ物理幅（既定2mm）の3次Savitzky–Golay局所多項式から1・2階微分を求めます。`--grid-mm` / `--smooth-mm` で変更でき、使用した実効幅はJSONに記録します。曲率は `(x'y''−y'x'')/(x'^2+y'^2)^(3/2)`、単位は1/mm。正負は始点から胴側へ進む向きの反時計回り／時計回りです。符号付き旋回角はunwrapした接線角から始点角を引き、絶対旋回角は各グリッド間の接線角変化の絶対値を累積します。逆向きの湾曲が相殺されないよう、両方を報告します。
 
 端部は片側の多項式当てはめになるため、窓幅の半分を灰色表示・フラグ付けし、曲率ピークと曲率RMSの評価から除外します。総旋回角は共通区間の始点・終点の推定も含むため端部条件に影響されます。曲率は平滑化幅に敏感で、補間は元中央線の情報量を増やしません。2mm・4mmなどの幅でも比較してください。最大曲率比は区間内の最大値同士の比で、同じ解剖学的位置のピーク同士を自動対応付けした値ではありません。モデルの湾曲消失を自動判定しません。
+
+
+### 16. 検証プログラムの選択と現在の検証結果（2026-10-06 JST）
+
+検証CLIは `pottery_rim_validation.py`（0.2.2-dev）、画像の追加生成は `pottery_rim_interval_plot.py` と `pottery_rim_curvature_plot.py`（各0.1.0）です。RadialSections本体は0.10.1のままです。詳しい実験条件・結果・制約は[ValidationReport.md](ValidationReport.md)にまとめています。
+
+| 目的 | プログラム／コマンド | 主な確認出力 |
+| --- | --- | --- |
+| モデルと元メッシュ交線の器厚・位置比較 | `pottery_rim_validation.py validate` | `station_measurements.csv`、`station_statistics.csv`、`profile_all_overlay.png`／`.ply`、個別重ね合わせ |
+| 保存済みモデル同士を比較 | 同 `compare` | `MODE_SELECTION_division_comparison.csv`、`…_summary.json`。最後の入力を基準とする |
+| メッシュから角度間隔を変えて再抽出 | 同 `sweep` | 各抽出・検証フォルダと条件間比較 |
+| 1°出力から開始位置・間隔依存性を検証 | 同 `phases` | 位相別検証、`phase_models_overlay.png`、比較CSV、`phase_experiment.json` |
+| 間隔依存性の画像だけ追加 | `pottery_rim_interval_plot.py` | 位置・器厚・接線差の4パネルPNG |
+| 曲率・旋回角だけ追加 | `pottery_rim_curvature_plot.py` | 6パネルPNG、測点・集計CSV、条件JSON |
+
+既存出力の場所は、現在の作業ディレクトリからの相対パスまたは絶対パスで指定します。入力は `rim_standardization/rim_qa.json` を持つ抽出出力フォルダ、またはその `rim_standardization` 自体です。フォルダ名を推測せず、実在する場所を指定してください。
+
+```bash
+# MorphPotから、隣のPotteryVolumeCalculatorにある保存済み出力を検証
+python pottery_rim_validation.py validate "../PotteryVolumeCalculator/0015Jinmen_small_RadialSections_5deg" --output-dir validation --interval-mm 5
+
+# 各間隔で開始位置0〜4°の共通5セットを作成
+python pottery_rim_validation.py phases "../PotteryVolumeCalculator/0015Jinmen_small_RadialSections_1deg" --output-dir phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --interval-mm 5
+
+# 既存モデルから2mm／4mm窓の曲率・旋回角を追加生成
+python pottery_rim_curvature_plot.py phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --smooth-mm 2 --output-dir curvature_common5_smooth2
+python pottery_rim_curvature_plot.py phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --smooth-mm 4 --output-dir curvature_common5_smooth4
+```
+
+**ここまでの結果**：既知厚4mmの合成壁では、旧共通法線測定の4.6188mmを個別法線測定で4.0000mmへ修正できました。提供された実データCSVのモデル厚4mmに最も近い対応点（モデル4.0268mm）では、64半断面の平均4.0300mm、最小2.5136mm、最大4.9239mm、母標準偏差0.4072mmでした。72半断面の集計ではなく、同じ対応点における変換後の法線器厚です。モデル厚は内外距離の中央値を別々に集約するため、器厚の平均とは一致する必要がありません。
+
+実土器 `0015Jinmen_small` の提示図（similarity／all、各間隔共通5位相）では、約23mmの主要曲率ピークと全体の約90°の符号付き旋回が5°・10°・15°で保持されています。累積絶対旋回角の1°基準との差は、2mm窓では概ね5°で20〜25°、10°で40°、15°で30°、4mm窓では5°で4〜7°、10°で10°、15°で15°へ縮小しました。これらは図からの概算で、精密な値は各 `…_summary.csv` で確認します。4〜7°は終端付近での推移を含む範囲です。
+
+現段階で主要な湾曲の消失を示す明瞭な所見はありません。細かな方向変化には角度間隔・開始位置・平滑化幅の依存性があり、この個体の比較条件では5°が比較的1°基準に近い傾向です。粗い間隔ほど常に悪化するとは限らず、5°を全個体共通の既定値とする根拠はまだありません。4mm窓を真値とせず、2mmと4mmを異なる形状スケールとして併記します。
+
+1°基準は真値ではなく、位相帯は最小〜最大で信頼区間ではありません。実土器の位相比較は利用者が実行し提示した画像の評価で、開発環境で元1°データから再計算した結果とは区別します。独立実測、未使用断面での照合、別個体・異なる器形、器軸／終端推定を含めた感度検証を次段階とします。
