@@ -16,6 +16,8 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 
 ## 目次
 
+- [器形条件に基づく全体モデル生成法の探索](#whole-shape-exploration)
+
 - [口縁付近の器厚交点・対応の診断](#whole-thickness-diagnostics)
 
 - [全体モデルの寸法・器厚検証](#whole-vessel-dimension-validation)
@@ -802,3 +804,36 @@ python pottery_whole_thickness_diagnostics.py \
 PLYはX=半径、Y=入力高さ、Z=0で入力単位。CSV・PNGはmmです。PNGの線分には交点を取得したが器厚から除外した線も含み、CSVのstatusで判別します。出力先は元モデルフォルダ外の空フォルダを指定。`--no-plots`でもCSV・PLYは生成します。異なる法線方向の距離は同じ定義の厚さではなく、方法間差をすべて誤差と判断しません。
 
 実データの中央値モデルでは、無制約24.346mmの線が外面口唇弧長2.685mmから内面22.935mmへ到達し、対応弧長差20.250mmでした。8mm窓ではこの交点を除外し、局所区間の最大有効値は制約外面法線6.724mm、中央線法線6.499mm。これは真の器厚の確定ではなく、遠い内面との交差が急増に寄与していたことの診断です。
+
+
+<a id="whole-shape-exploration"></a>
+
+## 器形条件に基づく全体モデル生成法の探索（0.1.0-exploration）
+
+`pottery_whole_shape_exploration.py`は、正規化済みPLYから全長弧長対応、頸部で分割する区間別対応、区間別対応＋底部固定の限定変形の3方式を生成・比較する開発検証用CLIです。現在のカテゴリ`necked_jar`は頸部のくびれを持つ器形の暫定的な幾何条件であり、考古学的な器種・型式の自動同定ではありません。
+
+```bash
+python -m pip install -r requirements.txt
+python pottery_whole_shape_exploration.py "/path/to/normalized.ply" --category necked_jar --output-dir exploration/individual_01
+```
+
+入力PLYの付属metadataから単位を読み取り、姿勢Transformは再適用しません。metadataがない場合は`--unit m`等を明示してください。出力先は新規または空ディレクトリを指定します。条件に不適合・未確定なら診断を保存して非ゼロ終了し、モデル生成を中止します。
+
+- `analysis/global_arc/`：全長弧長対応によるモデル。
+- `analysis/neck_segmented/`：頸部前後を別々に対応づけたモデル。座標変形なし。
+- `analysis/neck_segmented_warp/`：同じ空間変位場を内外面に適用したモデル。底部保護域を固定し、変位・せん断・高さひずみを制限。
+- `validation/`：全断面とモデルの重ね合わせ、距離・寸法・器厚のCSV、3方式の比較画像。
+- `exploration.json`：入力ハッシュ、単位、軸推定、ランドマーク支持率、変形の適用・拒否方向。
+
+制限を超える変形は拒否し、その方向は原形状のまま集計に残します。変形後のモデルを全方向の歪み除去済みと扱わないでください。内外面共通の変形でも器厚保存は保証しません。
+
+生成済み結果から部位別比較と器厚診断を追加する場合：
+
+```bash
+python summarize_whole_shape_exploration.py exploration/individual_01 exploration/individual_02 --output-dir exploration/research
+python plot_whole_thickness_diagnostics.py exploration/individual_01 exploration/individual_02
+```
+
+集計先`research`には部位別RMS・寸法差のCSVと`regional_and_dimensions.png`を出力します。器厚診断は各個体の`validation/model_thickness_diagnostic.png`へ出力します。解析一次出力、個別検証、解釈に用いる派生図表を分けて整理する構成です。
+
+0015Jinmen・MK18-Hajikiのbase姿勢PLYで3方式ずつ生成済み。今回の比較では従来方式を置き換える明確な改善は確認できませんでした。器厚測定は既存の無制約法線交点を使う診断であり、口唇付近に遠方交点が含まれます。詳細な条件・実行例・探索判断は[WholeShapeExploration.md](WholeShapeExploration.md)を参照してください。
