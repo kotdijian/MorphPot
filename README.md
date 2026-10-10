@@ -834,6 +834,30 @@ python summarize_whole_shape_exploration.py exploration/individual_01 exploratio
 python plot_whole_thickness_diagnostics.py exploration/individual_01 exploration/individual_02
 ```
 
+全体モデル探索の検証出力には、考古学者向けの説明図を追加しました。`validation/registration_comparison/RegistrationComparison.md`に、特徴点で位置合わせしない原位置断面（左）と、保存済みの頸部・口唇の限定変形を適用した断面（右）を同じ縮尺で掲載します。全体図・頸部口縁拡大図・統計グラフをtrainingとholdoutに分けて出力します。
+
+保存済みの探索結果から追加分だけを生成できます（メッシュの再解析は不要）：
+
+```bash
+python plot_whole_registration_comparison.py exploration/individual_01 exploration/individual_02
+
+# 出力を別フォルダへまとめる場合：その下に個体名のサブフォルダを作成
+python plot_whole_registration_comparison.py exploration/individual_01 exploration/individual_02 \
+  --output-dir registration_figures --interval-mm 1 --height-bin-mm 5
+```
+
+| 追加出力 | 内容 |
+| --- | --- |
+| `training_registration_comparison.png`／`holdout_…` | 原位置と位置合わせ後の全断面を左右に比較。共通の代表モデル・軸範囲 |
+| `*_registration_comparison_detail.png` | 同じ比較の頸部・口縁拡大 |
+| `*_registration_statistics.png` | 平均・母SD・RMS・p95・最大、方位別RMS、原位置高さ別平均±SD、距離累積分布 |
+| `*_paired_station_distances.csv` | 同じ元弧長測点の変形前後座標・距離・部位・変形状態 |
+| `registration_distance_summary.csv` | 内外面・合算、全体・底部・胴部・頸部〜口唇別の距離統計 |
+| `*_angular_statistics.csv`／`*_height_statistics.csv` | グラフの方位別・原位置高さ別統計 |
+| `RegistrationComparison.md`／`registration_comparison.json` | 説明レポートと条件・定義 |
+
+対象は`exploration.json`を持つ器形探索出力です。従来のWholeModel／WholeValidationだけでは特徴点変形の記録がないため、この比較CLIの入力にはなりません。原位置は各断面を共通の半径–高さ平面へ投影したr,zで、追加の特徴点変形を行っていない状態です。左右で同じモデル・同じ原弧長測点を使い、底部を固定、変形拒否方向は原形状で残します。統計は符号なしの測点→同表面モデル線分距離で、器厚ではありません。変形後は再標本化しないため、既存の距離CSVとは小幅な差が生じ得ます。変形後の散らばり減少を、真の形態への精度改善とは解釈しません。
+
 集計先`research`には部位別RMS・寸法差のCSVと`regional_and_dimensions.png`を出力します。器厚診断は各個体の`validation/model_thickness_diagnostic.png`へ出力します。解析一次出力、個別検証、解釈に用いる派生図表を分けて整理する構成です。
 
 0015Jinmen・MK18-Hajikiのbase姿勢PLYで3方式ずつ生成済み。今回の比較では従来方式を置き換える明確な改善は確認できませんでした。器厚測定は既存の無制約法線交点を使う診断であり、口唇付近に遠方交点が含まれます。詳細な条件・実行例・探索判断は[WholeShapeExploration.md](WholeShapeExploration.md)を参照してください。

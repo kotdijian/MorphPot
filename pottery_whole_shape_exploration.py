@@ -234,6 +234,11 @@ def run(a):
         ax.set(aspect='equal',xlabel='Radius [mm]',ylabel='Input Z [mm]');ax.legend(fontsize=8)
     axes[0].set_title('Whole profiles / original frame');axes[1].set_title('Neck / rim detail');axes[1].set_ylim(target['neck'][1]-10,target['lip'][1]+5);axes[1].set_xlim(target['neck'][0]-15,target['lip'][0]+15)
     fig.tight_layout();fig.savefig(validation/'method_comparison.png',dpi=170);plt.close(fig)
+    # Explanatory paired figures use the same saved warp and raw source stations.
+    # They do not change the model or the existing validation measurements.
+    if held:
+        from plot_whole_registration_comparison import run as registration_figures
+        registration_figures(output)
     print('COMPLETED',output,flush=True)
 
 def main():
