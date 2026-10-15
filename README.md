@@ -861,3 +861,8 @@ python plot_whole_registration_comparison.py exploration/individual_01 explorati
 集計先`research`には部位別RMS・寸法差のCSVと`regional_and_dimensions.png`を出力します。器厚診断は各個体の`validation/model_thickness_diagnostic.png`へ出力します。解析一次出力、個別検証、解釈に用いる派生図表を分けて整理する構成です。
 
 0015Jinmen・MK18-Hajikiのbase姿勢PLYで3方式ずつ生成済み。今回の比較では従来方式を置き換える明確な改善は確認できませんでした。器厚測定は既存の無制約法線交点を使う診断であり、口唇付近に遠方交点が含まれます。詳細な条件・実行例・探索判断は[WholeShapeExploration.md](WholeShapeExploration.md)を参照してください。
+
+
+### registration comparisonの結果
+
+0015JinmenとMK18-Hajikiの原位置／特徴点位置合わせ後の比較図と統計を、[WholeRegistrationComparison.md](WholeRegistrationComparison.md)に掲載しました。MK18の頸部〜口唇ではRMSが1.941→0.536 mmとなる一方、0015の全体RMSは2.424→2.455 mmです。変形拒否方向も含めた結果であり、位置合わせによる散らばりの減少を精度保証とは解釈しません。

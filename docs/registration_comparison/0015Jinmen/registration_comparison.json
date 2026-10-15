@@ -1,0 +1,24 @@
+{
+  "version": "0.1.0",
+  "method": "neck_segmented_warp",
+  "source_input_sha256": "bf72e617da8be917e1c5a3c092c307ed900072ab4679c5ed5a3e6bfff4cd88fe",
+  "interval_mm": 1.0,
+  "height_bin_mm": 5.0,
+  "counts": {
+    "training": {
+      "total": 65,
+      "applied": 13
+    },
+    "holdout": {
+      "total": 66,
+      "applied": 12
+    }
+  },
+  "distance": "unsigned source point to same-surface representative line segment",
+  "sampling": "identical raw-arc stations in both frames; transformed stations are not resampled",
+  "height_bins": "assigned from RAW z in both frames",
+  "std_ddof": 0,
+  "units": "mm",
+  "transform": "recorded constrained shared warp only; no pose transform",
+  "rejected": "identity, retained in both panels and all statistics"
+}
