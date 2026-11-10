@@ -24,6 +24,7 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 
 - [全体代表モデルの独立検証スクリプト](#whole-vessel-validation)
 - [個体の全体代表モデル（独立CLI）](#whole-vessel-model)
+- [表面痕跡解析](#surface-trace)
 - [PotteryRadialSections 操作ガイド](#radial-sections-guide)
 - [1. 入力モデルと環境を準備する](#setup)
 - [2. 基本操作：器軸・断面・容量をまとめて計算する](#basic-usage)
@@ -55,6 +56,18 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 - [曲率・旋回角の追加検証](https://github.com/kotdijian/MorphPot/blob/main/README.md#curvature-turning)
 
 詳細な検証方法・結果は [ValidationReport.md](ValidationReport.md) を参照してください。
+
+<a id="surface-trace"></a>
+
+## 表面痕跡解析
+
+土器表面の多尺度形状特徴と痕跡候補の解析は、今後MorphPotで開発します。姿勢正規化済みのPLYを指定して実行します。
+
+```bash
+python MorphPot.py surface-trace "/path/to/pot001_rev.ply" --unit auto
+```
+
+`--unit auto` は入力に付随するメタデータから座標単位を読み取ります。メタデータがない場合は、実際の単位に合わせて `--unit m` などを指定してください。結果はPLYとJSON等に保存されます。分類は隆起や凹みなどの形態的特徴を表します。
 
 <a id="radial-sections-guide"></a>
 
