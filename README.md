@@ -16,6 +16,8 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 
 ## 目次
 
+- [はじめて使う方へ：Pythonの導入とvenvの構築](#python-environment)
+
 - [Reconstruction / Guide Fit：破片同士の当たり判定](#sherd-collision)
 
 - [容量計算：ボクセル・断面・実測図](#capacity)
@@ -61,6 +63,102 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 - [曲率・旋回角の追加検証](https://github.com/kotdijian/MorphPot/blob/main/README.md#curvature-turning)
 
 詳細な検証方法・結果は [ValidationReport.md](ValidationReport.md) を参照してください。
+
+<a id="python-environment"></a>
+
+## はじめて使う方へ：Pythonの導入とvenvの構築
+
+初回は **1. Pythonのインストール → 2. フォルダの整備 → 3. 仮想環境の作成と依存関係の導入** の順に進めます。macOSでは「ターミナル」、Windowsでは「PowerShell」を使います。
+
+<a id="python-install"></a>
+
+### 1. Pythonのインストール
+
+AOMと同じく、MorphPotの初回セットアップでは **Python 3.13.x** を推奨します。お使いのOSに合った手順を選んでください。
+
+#### Windows
+
+すでにPowerShellで `py -3.13 --version` を実行して `Python 3.13.x` と表示される場合は、[2. フォルダの整備](#folder-setup)へ進んでください。
+
+1. [Python公式の Install Manager 配布ページ](https://www.python.org/downloads/release/pymanager-264/)を開き、**Download Installer (MSIX)** をクリックします。この `.msix` はx64とARM64の両方に対応します。
+2. ダウンロードした `.msix` をダブルクリックし、Windowsの「アプリ インストーラー」で **インストール** を選びます。
+3. スタートメニューから新しい **PowerShell** を開き、次の2行を順に実行します。1行目でPython 3.13本体をインストールし、2行目でバージョンを確認します。
+
+```powershell
+py install 3.13
+py -3.13 --version
+```
+
+`Python 3.13.` で始まるバージョンが表示されれば、[2. フォルダの整備](#folder-setup)へ進みます。Pythonが複数入っている場合は、`python --version` が別のバージョンを表示することがあるため、ここではバージョンを指定して確認します。
+
+`py install 3.13` が古いPythonランチャーの影響で動かない場合は、`pymanager install 3.13` でインストールし、`pymanager exec -V:3.13 --version` で確認できます。
+
+#### macOS
+
+すでにターミナルで `python3.13 --version` を実行して `Python 3.13.x` と表示される場合は、[2. フォルダの整備](#folder-setup)へ進んでください。
+
+1. [Python 3.13.17 の公式配布ページ](https://www.python.org/downloads/release/python-31317/#files)の **Files** から **macOS installer** をダウンロードします。Apple SiliconとIntel Macの両方に対応します。
+2. ダウンロードした `.pkg` を開き、画面の案内に沿ってインストールします。
+3. 新しい「ターミナル」を開き、次を実行します。
+
+```bash
+python3.13 --version
+```
+
+`Python 3.13.17` など、`3.13.` で始まるバージョンが表示されれば、[2. フォルダの整備](#folder-setup)へ進みます。
+
+<a id="folder-setup"></a>
+
+### 2. フォルダの整備
+
+1. [MorphPotのGitHubリポジトリ](https://github.com/kotdijian/MorphPot)で **Code → Download ZIP** を選び、ZIPを展開します。Gitで取得済みなら、既存のフォルダを使えます。
+2. `MorphPot.py` と `requirements.txt` が並んでいるフォルダを開きます。ZIPから展開した場合は通常 `MorphPot-main` です。このフォルダを作業場所にします。
+3. **macOS**：ターミナルで `cd` と半角スペースを入力し、Finderから作業フォルダをターミナルにドラッグしてEnterを押します。`ls` で `MorphPot.py` が表示されることを確認します。**Windows**：エクスプローラーで作業フォルダを開き、アドレスバーに `powershell` と入力してEnterを押します。`dir` で `MorphPot.py` を確認します。
+
+<a id="initial-setup"></a>
+
+### 3. 仮想環境の作成と依存関係の導入
+
+MorphPot専用の `venv` を作成・有効化し、必要なパッケージをインストールします。
+
+#### macOS（ターミナル）
+
+```bash
+python3.13 -m venv venv
+source venv/bin/activate
+python3 -m pip install --upgrade pip setuptools wheel
+python3 -m pip install -r requirements.txt
+python3 -m pip check
+python3 MorphPot.py --help
+```
+
+#### Windows（PowerShell）
+
+Pythonの導入時に `pymanager exec` でバージョンを確認した場合は、最初の行を `pymanager exec -V:3.13 -m venv venv` に置き換えます。
+
+```powershell
+py -3.13 -m venv venv
+.\venv\Scripts\Activate.ps1
+py -m pip install --upgrade pip setuptools wheel
+py -m pip install -r requirements.txt
+py -m pip check
+py MorphPot.py --help
+```
+
+実行ポリシーにより `Activate.ps1` が拒否された場合は、次を実行し、有効化の後に上の `py -m pip install` の行から再開します。変更は現在のPowerShellセッションだけに適用されます。
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\venv\Scripts\Activate.ps1
+```
+
+#### GUIツールを使う場合
+
+ReconstructionやGuide Fitを使う場合は、[GUI用の依存関係の導入手順](#sherd-collision)を参照してください。
+
+#### 2回目以降
+
+新しいターミナルやPowerShellを開いたら、同じフォルダへ移動して `venv` を有効化してから各コマンドを実行します。仮想環境の作成とパッケージの導入は、初回の作業です。
 
 <a id="sherd-collision"></a>
 
@@ -161,25 +259,7 @@ OrthoMakerで姿勢正規化した、内外面を含む土器の三角形メッ�
 
 モデルを再回転・再正規化する必要はありません。器軸の傾きは診断値として出力し、自動補正しません。内面のないモデルや断面が閉じない破片では、内面による器軸推定・容量計算が成立しない場合があります。
 
-リポジトリのフォルダで、使用するOSの手順を実行します。
-
-**Windows（PowerShell）**
-
-```powershell
-py -m venv venv
-.\venv\Scripts\Activate.ps1
-py -m pip install -r requirements.txt
-```
-
-**macOS（ターミナル）**
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-python3 -m pip install -r requirements.txt
-```
-
-この断面解析にはGUI用の追加依存は不要です。
+実行前に[初回セットアップ](#python-environment)を行ってください。この断面解析にはGUI用の追加依存は不要です。
 
 <a id="basic-usage"></a>
 
