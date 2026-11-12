@@ -16,6 +16,8 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 
 ## 目次
 
+- [Reconstruction / Guide Fit：破片同士の当たり判定](#sherd-collision)
+
 - [容量計算：ボクセル・断面・実測図](#capacity)
 - [AOM姿勢別の容量比較](docs/capacity/README.md#aom-pose-comparison)
 
@@ -59,6 +61,31 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 - [曲率・旋回角の追加検証](https://github.com/kotdijian/MorphPot/blob/main/README.md#curvature-turning)
 
 詳細な検証方法・結果は [ValidationReport.md](ValidationReport.md) を参照してください。
+
+<a id="sherd-collision"></a>
+
+## Reconstruction / Guide Fit：破片同士の当たり判定
+
+Reconstruction v0.2.6、Guide Fit v0.1.1では、同じ座標系・単位に仮配置した破片のPLY／OBJを複数選択できます。**1破片1ファイルを推奨**します。複数ファイルはそれぞれを1破片とし、単一ファイルでは面が辺を共有する連結成分を別破片として扱います。破片同士を溶接して1成分にすると、その間は判定できません。点群だけでは判定できないため、三角形メッシュを使用してください。
+
+```bash
+python -m pip install -r requirements-gui.txt
+python pottery_reconstruction_3d.py
+python pottery_guidefit_reconstruction.py
+```
+
+- **Reconstruction**：現在配置を表示・解析する際に衝突ペアを記録し、該当する破片を赤で表示します。入力の配置は変えません。赤い破片があれば、外部で仮配置を直して再読込できます。
+- **Guide Fit**：初期配置にめり込みがある場合は自動配置を開始しません。初期配置が通った場合は、破片ごとに、すでに移動した破片とまだ移動していない破片の両方を照合します。めり込む候補は棄却し、残差を改善する短い移動などを試します。適合する候補がなければ元の位置を維持し、衝突で止まった場合は `blocked_collision` を記録します。器軸方向・周方向を固定し、放射移動と小さな回転だけを許す既存条件は維持します。ガイド面と復元器形は衝突判定に含めません。
+- 既定の判定許容値は **0.05 mm** です。面や辺が触れるだけの接合を許し、三角形が横切る場合と、閉じたメッシュへの内部侵入を調べます。開放メッシュを含む組には判定範囲の制限を記録します。開放面同士の同一平面での重なりは、面接触と区別できません。判定は候補の最終位置で行い、移動経路や全破片の同時最適化は対象外です。
+
+器形推定を行わず、配置だけを先に確認できます。GUIを使わない場合は `requirements.txt` の依存関係で実行できます。
+
+```bash
+python pottery_reconstruction_3d.py "sherd_a.ply" "sherd_b.obj" \
+  --input-unit mm --collision-only --output-dir collision_check
+```
+
+`sherd_collision_report.json` に破片IDとファイル名、ペアごとの判定根拠、閉じた立体かどうかを保存します。上記CLIはめり込みを検出すると終了コード2を返します。Guide Fitは、初期・最終配置のレポート、採否と衝突相手を含む `sherd_guidefit_transforms.csv`、最終確認を通った三角形メッシュを `fitted_sherd_meshes/` に出力します。PLYには形状と単位を記録します。元のテクスチャを保持する場合はCSVの行列を元モデルへ適用してください。
 
 <a id="capacity"></a>
 

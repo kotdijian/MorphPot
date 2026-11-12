@@ -36,13 +36,15 @@ import json
 import math
 import sys
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Sequence
 
 import numpy as np
 
-__version__ = "0.2.5"
+from morphpot.sherd_collision import DEFAULT_TOLERANCE_MM, Placement, SherdMesh, load_sherds
+
+__version__ = "0.2.6"
 
 UNIT_TO_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0}
 MM_TO_UNIT = {"mm": 1.0, "cm": 0.1, "m": 0.001}
@@ -112,6 +114,7 @@ class ReconstructionResult:
     point_nearest_surface: np.ndarray
     fragment_fit_quality: dict[int, dict]
     metadata: dict
+    sherd_meshes: dict[int, SherdMesh] = field(default_factory=dict)
 
 
 @dataclass
@@ -1729,16 +1732,17 @@ def write_ply_point_cloud(path: Path, points: np.ndarray, colors: np.ndarray | N
 
 
 def write_ply_mesh(path: Path, vertices: np.ndarray, faces: np.ndarray,
-                   coordinate_unit: str = "mm") -> None:
-    v = np.asarray(vertices, dtype=np.float32); faces = np.asarray(faces, dtype=np.int32)
+                   coordinate_unit: str = "mm", *, double_precision: bool = False) -> None:
+    dtype, ply_type = ("<f8", "double") if double_precision else ("<f4", "float")
+    v = np.asarray(vertices, dtype=dtype); faces = np.asarray(faces, dtype=np.int32)
     path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as f:
         header = ["ply","format binary_little_endian 1.0",
                   f"comment PotteryReconstruction3D v{__version__}",
                   f"comment coordinate_unit={coordinate_unit}",
-                  f"element vertex {len(v)}","property float x","property float y","property float z",
+                  f"element vertex {len(v)}",f"property {ply_type} x",f"property {ply_type} y",f"property {ply_type} z",
                   f"element face {len(faces)}","property list uchar int vertex_indices","end_header"]
-        f.write(("\n".join(header)+"\n").encode("ascii")); v.astype("<f4",copy=False).tofile(f)
+        f.write(("\n".join(header)+"\n").encode("ascii")); v.tofile(f)
         if len(faces):
             dt=np.dtype([("count","u1"),("idx","<i4",(3,))]); arr=np.empty(len(faces),dtype=dt); arr["count"]=3;arr["idx"]=faces;arr.tofile(f)
 
@@ -1755,7 +1759,50 @@ def write_axis_ply(path: Path, axis: GlobalAxisFit, zmin: float, zmax: float,
 # Main reconstruction pipeline
 # -----------------------------------------------------------------------------
 
-def run_reconstruction(input_path: Path,
+def load_placement(input_paths, input_unit, collision_tolerance_mm=DEFAULT_TOLERANCE_MM):
+    paths = [Path(input_paths)] if isinstance(input_paths, (str, Path)) else [Path(p) for p in input_paths]
+    if not paths:
+        raise ValueError("At least one sherd mesh is required.")
+    if len(set(p.resolve() for p in paths)) != len(paths):
+        raise ValueError("Do not select the same sherd file twice.")
+    return paths, Placement(load_sherds(paths, unit_scale(input_unit)), collision_tolerance_mm)
+
+
+def sample_placement(placement, display_points, face_samples=0):
+    vertices, labels, clusters = [], [], []
+    centers, normals, face_labels = [], [], []
+    total_v = sum(len(s.mesh.vertices) for s in placement.sherds.values())
+    total_f = sum(len(s.mesh.faces) for s in placement.sherds.values())
+    for fid, sherd in placement.sherds.items():
+        mesh = sherd.mesh
+        vi = sample_indices(len(mesh.vertices), max(1, display_points * len(mesh.vertices) // total_v), seed=0)
+        p = np.asarray(mesh.vertices[vi])
+        vertices.append(p)
+        labels.append(np.full(len(p), fid, dtype=np.int32))
+        clusters.append(FragmentCluster(fid, len(p), p.mean(axis=0).tolist(),
+                                        mesh.bounds[0].tolist(), mesh.bounds[1].tolist()))
+        if face_samples:
+            fi = sample_indices(len(mesh.faces), max(1, face_samples * len(mesh.faces) // total_f), seed=2)
+            centers.append(mesh.vertices[mesh.faces[fi]].mean(axis=1))
+            normals.append(mesh.face_normals[fi])
+            face_labels.append(np.full(len(fi), fid, dtype=np.int32))
+    sampled_faces = (np.concatenate(centers), np.concatenate(normals), np.concatenate(face_labels)) if face_samples else None
+    return np.concatenate(vertices), np.concatenate(labels), clusters, sampled_faces
+
+
+def collision_message(audit):
+    pairs = [f"{p['fragment_a']}–{p['fragment_b']}" for p in audit["pairs"] if p["status"] == "penetration"]
+    label = {"penetration": "めり込みあり", "clear_surface_only": "開放メッシュを含むため内部の保証なし",
+             "clear": "めり込みは検出されませんでした", "not_applicable": "比較対象の破片が1点"}[audit["status"]]
+    return f"破片間チェック: {label}" + (f" (ID: {', '.join(pairs)})" if pairs else "")
+
+
+def write_collision_report(out, audit):
+    (out / "sherd_collision_report.json").write_text(
+        json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def run_reconstruction(input_path: Path | Sequence[Path],
                        input_unit: str = "m", export_unit_name: str = "m",
                        display_points: int = 220_000, face_samples: int = 320_000,
                        cluster_voxel_mm: float = 1.5, cluster_link_radius_vox: float = 2.1,
@@ -1772,29 +1819,24 @@ def run_reconstruction(input_path: Path,
                        axis_search_directions: int = 480,
                        axis_surface_keep_fraction: float = 0.70,
                        mesh_angle_step_deg: float = 10.0,
-                       progress: Callable[[str], None] | None = None) -> ReconstructionResult:
-    t0=time.perf_counter(); input_path=Path(input_path); ins=unit_scale(input_unit)
+                       progress: Callable[[str], None] | None = None,
+                       collision_tolerance_mm: float = DEFAULT_TOLERANCE_MM) -> ReconstructionResult:
+    t0=time.perf_counter(); ins=unit_scale(input_unit)
     def note(s):
         print(s)
         if progress: progress(s)
 
-    note(f"Loading: {input_path}")
-    src=open_mesh_source(input_path)
-    p_input, colors=src.sample_vertices(display_points,seed=0); p_mm=p_input*ins
-    note(f"Display sample: {len(p_mm):,} vertices")
-    labels, clusters=cluster_sample_points(p_mm,voxel_mm=cluster_voxel_mm,
-                                           link_radius_vox=cluster_link_radius_vox,
-                                           min_sample_points=min_fragment_sample_points)
-    if not clusters:
-        raise ValueError("No retained sherd clusters. Lower min-fragment threshold or check input unit.")
-    note(f"Retained sherds: {len(clusters)} (coordinates preserved)")
-
-    fc_input, fn=src.sample_face_centroids_normals(face_samples,seed=2); fc_mm=fc_input*ins
-    face_labels=assign_face_labels(fc_mm,p_mm,labels,max_distance_mm=max(3.0,cluster_voxel_mm*2.8))
-    keep=face_labels>0
-    note(f"Face samples assigned to retained sherds: {np.count_nonzero(keep):,}/{len(face_labels):,}")
+    paths, assembly = load_placement(input_path, input_unit, collision_tolerance_mm)
+    input_path = paths[0]
+    note(f"Loaded {len(paths)} file(s), {len(assembly.sherds)} sherd mesh(es); coordinates preserved")
+    audit = assembly.audit()
+    note(collision_message(audit))
+    p_mm, labels, clusters, (fc_mm, fn, face_labels) = sample_placement(assembly, display_points, face_samples)
+    p_input, colors = p_mm / ins, None
+    keep = face_labels > 0
+    note(f"Display sample: {len(p_mm):,} vertices; face samples: {len(face_labels):,}")
     if np.count_nonzero(keep)<500:
-        raise ValueError("Too few face samples could be assigned to retained sherds")
+        raise ValueError("Too few face samples for vessel reconstruction; use --collision-only to audit placement.")
 
     placement=p_mm[labels>0]
     axis=estimate_global_axis(fc_mm[keep],fn[keep],face_labels[keep],placement,
@@ -1823,10 +1865,12 @@ def run_reconstruction(input_path: Path,
     metadata={
         "program":"PotteryReconstruction3D","version":__version__,
         "source_file":str(input_path),"source_sha256":sha256_file(input_path),
+        "source_files":[{"path":str(p),"sha256":sha256_file(p)} for p in paths],
+        "sherd_collision":audit,
         "input_unit":input_unit,"internal_unit":"mm","export_unit":export_unit_name,
         "method":{
             "placement_policy":"STRICT IMMUTABLE: input sherd XYZ coordinates and orientations are never translated, rotated, shifted, reversed, or refined",
-            "fragment_clustering":"spatial labels only; no coordinate transform",
+            "fragment_clustering":"one ID per selected file, or edge-connected components for a single input file",
             "coordinate_transform_applied_to_sherds":False,
             "axis":"one global axis estimated by unrestricted 3-D consensus search from surface-like sherd faces; no input-axis or centre prior",
             "profile":"inner/outer inferred in global axis coordinates from revolution-compatible face normals and radial-normal orientation",
@@ -1836,8 +1880,7 @@ def run_reconstruction(input_path: Path,
         },
         "parameters":{
             "display_points":int(display_points),"face_samples":int(face_samples),
-            "cluster_voxel_mm":float(cluster_voxel_mm),"cluster_link_radius_vox":float(cluster_link_radius_vox),
-            "min_fragment_sample_points":int(min_fragment_sample_points),"profile_bin_mm":float(profile_bin_mm),
+            "profile_bin_mm":float(profile_bin_mm),
             "compatibility_max":float(compatibility_max),"radial_sign_min":float(radial_sign_min),
             "thickness_min_mm":float(thickness_min_mm),"thickness_max_mm":float(thickness_max_mm),
             "profile_max_gap_mm":float(profile_max_gap_mm),"profile_smooth_window_bins":int(profile_smooth_window_bins),
@@ -1858,7 +1901,7 @@ def run_reconstruction(input_path: Path,
         face_centroids_mm=fc_mm,face_normals=fn,face_labels=face_labels,
         axis=axis,profile=profile,mesh_vertices_mm=mv,mesh_faces=mf,
         point_residual_mm=residual,point_nearest_surface=surf,
-        fragment_fit_quality=quality,metadata=metadata
+        fragment_fit_quality=quality,metadata=metadata,sherd_meshes=assembly.sherds
     )
 
 
@@ -1869,6 +1912,8 @@ def run_reconstruction(input_path: Path,
 def export_result(result: ReconstructionResult, out: Path) -> None:
     out=Path(out);out.mkdir(parents=True,exist_ok=True); fragdir=out/"fragment_samples";fragdir.mkdir(exist_ok=True)
     s=export_scale(result.export_unit)
+    if "sherd_collision" in result.metadata:
+        write_collision_report(out, result.metadata["sherd_collision"])
 
     write_ply_mesh(out/"reconstructed_shell.ply",result.mesh_vertices_mm*s,result.mesh_faces,coordinate_unit=result.export_unit)
     rgb=np.zeros((len(result.display_points_mm),3),np.uint8);rgb[result.display_labels==0]=[170,170,170]
@@ -1917,7 +1962,7 @@ def export_result(result: ReconstructionResult, out: Path) -> None:
 # GUI -- inherited interaction style, strict fixed-placement policy
 # -----------------------------------------------------------------------------
 
-def launch_gui(initial_input: Path | None = None):
+def launch_gui(initial_input: Path | Sequence[Path] = (), input_unit="m", export_unit="m"):
     try:
         from PySide6 import QtCore, QtWidgets
         import pyvista as pv
@@ -1928,7 +1973,7 @@ def launch_gui(initial_input: Path | None = None):
     class MainWindow(QtWidgets.QMainWindow):
         def __init__(self):
             super().__init__(); self.setWindowTitle(f"PotteryReconstruction3D v{__version__}"); self.resize(1540,940)
-            self.source_path:Path|None=None; self.result:ReconstructionResult|None=None
+            self.source_path:Path|None=None; self.source_paths=[Path(initial_input)] if isinstance(initial_input,(str,Path)) else list(initial_input); self.preview_audit=None; self.result:ReconstructionResult|None=None
             self.preview_points_input=None;self.preview_points_mm=None;self.preview_labels=None;self.preview_colors=None
             self.guide_ring_set:GuideRingSet|None=None; self.guide_registration:GuideRegistration|None=None
             central=QtWidgets.QWidget();self.setCentralWidget(central);layout=QtWidgets.QHBoxLayout(central)
@@ -1936,11 +1981,11 @@ def launch_gui(initial_input: Path | None = None):
 
             self.open_btn=QtWidgets.QPushButton("1  PLY / OBJを開く");self.open_btn.clicked.connect(self.open_dialog);form.addWidget(self.open_btn)
             ur=QtWidgets.QHBoxLayout();ur.addWidget(QtWidgets.QLabel("入力単位"));self.input_unit=QtWidgets.QComboBox();self.input_unit.addItems(["m","mm","cm"]);ur.addWidget(self.input_unit);ur.addWidget(QtWidgets.QLabel("出力単位"));self.output_unit=QtWidgets.QComboBox();self.output_unit.addItems(["m","mm","cm"]);ur.addWidget(self.output_unit);form.addLayout(ur)
+            self.input_unit.setCurrentText(input_unit);self.output_unit.setCurrentText(export_unit)
 
             self.display_points=self._spin("表示点数",20000,800000,220000,20000)
             self.face_samples=self._spin("法線解析 face sample",20000,1000000,320000,20000)
-            self.cluster_voxel=self._dspin("破片分離 voxel [mm]",0.2,10.0,1.5,0.1,2)
-            self.min_frag=self._spin("最小 sample 点数",30,50000,400,50)
+            self.collision_tol=self._dspin("めり込み許容値 [mm]",0.001,2,DEFAULT_TOLERANCE_MM,0.01,3)
             form.addWidget(self._separator("Global axis / current placement"))
             self.axis_search_dirs=self._spin("軸探索方向数",120,1200,480,60)
             self.axis_surface_keep=self._dspin("軸推定 surface-like face 採用率",0.40,0.90,0.70,0.05,2)
@@ -1969,7 +2014,7 @@ def launch_gui(initial_input: Path | None = None):
 
             layout.addWidget(controls);self.plotter=QtInteractor(central);layout.addWidget(self.plotter.interactor,1);self.plotter.set_background("white");self.plotter.add_axes()
             if initial_input:
-                self.source_path=Path(initial_input);self._log(f"Input: {self.source_path}");QtCore.QTimer.singleShot(150,self.load_preview)
+                self.source_path=self.source_paths[0];self._log(f"Input: {self.source_paths}");QtCore.QTimer.singleShot(150,self.load_preview)
 
         def _separator(self,text):
             lab=QtWidgets.QLabel(text);font=lab.font();font.setBold(True);lab.setFont(font);return lab
@@ -1979,8 +2024,11 @@ def launch_gui(initial_input: Path | None = None):
             row=QtWidgets.QHBoxLayout();row.addWidget(QtWidgets.QLabel(label));w=QtWidgets.QDoubleSpinBox();w.setRange(lo,hi);w.setValue(value);w.setSingleStep(step);w.setDecimals(decimals);row.addWidget(w);self.form.addLayout(row);return w
         def _log(self,text): self.status.appendPlainText(str(text));QtWidgets.QApplication.processEvents()
         def open_dialog(self):
-            fn,_=QtWidgets.QFileDialog.getOpenFileName(self,"土器破片3Dモデル","","Mesh (*.ply *.obj);;All files (*)")
-            if fn:self.source_path=Path(fn);self.result=None;self._log(f"Input: {self.source_path}")
+            files,_=QtWidgets.QFileDialog.getOpenFileNames(self,"土器破片3Dモデル（複数選択可）","","Mesh (*.ply *.obj)")
+            if files:
+                self.source_paths=[Path(fn) for fn in files]; self.source_path=self.source_paths[0]
+                self.result=None; self.preview_audit=None; self.preview_points_input=None
+                self._log(f"Input: {self.source_paths}")
 
         def _plot_polyline(self, points, color="black", width=3, closed=False):
             """Display one connected polyline in PyVista.
@@ -2034,6 +2082,8 @@ def launch_gui(initial_input: Path | None = None):
             poly=pv.PolyData(p);rgb=np.zeros((len(p),3),np.uint8);rgb[labels==0]=[170,170,170]
             for fid in np.unique(labels):
                 if fid>0:rgb[labels==fid]=fragment_color(int(fid))
+            if self.preview_audit:
+                rgb[np.isin(labels, self.preview_audit["conflicting_ids"])] = [220, 40, 40]
             poly["fragment_rgb"]=rgb;self.plotter.add_points(poly,scalars="fragment_rgb",rgb=True,point_size=3.0,render_points_as_spheres=False)
             gui_sc=1.0/unit_scale(self.input_unit.currentText())
             self._add_guide_rings(gui_sc)
@@ -2124,10 +2174,13 @@ def launch_gui(initial_input: Path | None = None):
             if self.source_path is None:self.open_dialog()
             if self.source_path is None:return
             try:
-                src=open_mesh_source(self.source_path);p,c=src.sample_vertices(self.display_points.value(),seed=0);scale=unit_scale(self.input_unit.currentText());pmm=p*scale
-                labels,clusters=cluster_sample_points(pmm,voxel_mm=self.cluster_voxel.value(),min_sample_points=self.min_frag.value())
-                self.preview_points_input=p;self.preview_points_mm=pmm;self.preview_labels=labels;self.preview_colors=c
-                self._render_preview(reset_camera=True);self._log(f"現在配置: {len(p):,} points / retained fragments={len(clusters)}; coordinates unchanged")
+                _, assembly=load_placement(self.source_paths,self.input_unit.currentText(),self.collision_tol.value())
+                self.preview_audit=assembly.audit()
+                self.preview_input_unit=self.input_unit.currentText()
+                pmm,labels,clusters,_=sample_placement(assembly,self.display_points.value())
+                p=pmm/unit_scale(self.input_unit.currentText())
+                self.preview_points_input=p;self.preview_points_mm=pmm;self.preview_labels=labels;self.preview_colors=None
+                self._render_preview(reset_camera=True);self._log(collision_message(self.preview_audit))
                 self._populate_clusters(clusters)
             except Exception as exc:QtWidgets.QMessageBox.critical(self,"読み込みエラー",str(exc));self._log(f"ERROR: {exc}")
         def _populate_clusters(self,clusters):
@@ -2139,9 +2192,9 @@ def launch_gui(initial_input: Path | None = None):
             if self.source_path is None:self.open_dialog()
             if self.source_path is None:return
             try:
-                self._log("--- v0.2.4 STRICT fixed-placement reconstruction start ---")
-                self.result=run_reconstruction(self.source_path,input_unit=self.input_unit.currentText(),export_unit_name=self.output_unit.currentText(),display_points=self.display_points.value(),face_samples=self.face_samples.value(),cluster_voxel_mm=self.cluster_voxel.value(),min_fragment_sample_points=self.min_frag.value(),profile_bin_mm=self.profile_bin.value(),compatibility_max=self.compatibility.value(),radial_sign_min=self.radial_sign.value(),thickness_min_mm=self.thick_min.value(),thickness_max_mm=self.thick_max.value(),axis_search_directions=self.axis_search_dirs.value(),axis_surface_keep_fraction=self.axis_surface_keep.value(),mesh_angle_step_deg=self.mesh_ang.value(),progress=self._log)
-                if self.preview_points_input is not None and len(self.preview_points_input)==len(self.result.display_points_input):
+                self._log("--- fixed-placement reconstruction start ---")
+                self.result=run_reconstruction(self.source_paths,collision_tolerance_mm=self.collision_tol.value(),input_unit=self.input_unit.currentText(),export_unit_name=self.output_unit.currentText(),display_points=self.display_points.value(),face_samples=self.face_samples.value(),profile_bin_mm=self.profile_bin.value(),compatibility_max=self.compatibility.value(),radial_sign_min=self.radial_sign.value(),thickness_min_mm=self.thick_min.value(),thickness_max_mm=self.thick_max.value(),axis_search_directions=self.axis_search_dirs.value(),axis_surface_keep_fraction=self.axis_surface_keep.value(),mesh_angle_step_deg=self.mesh_ang.value(),progress=self._log)
+                if self.preview_points_input is not None and self.preview_input_unit == self.input_unit.currentText() and len(self.preview_points_input)==len(self.result.display_points_input):
                     max_delta=float(np.max(np.abs(self.preview_points_input-self.result.display_points_input)))
                     self._log(f"LOCK CHECK: max |analysis XYZ - preview XYZ| = {max_delta:.12g} input units")
                     if max_delta>1e-12:
@@ -2180,15 +2233,18 @@ def launch_gui(initial_input: Path | None = None):
 
             # Exact unchanged sample coordinates from the input placement.
             p = self.result.display_points_input
-            valid = np.isfinite(self.result.point_residual_mm)
+            conflict = np.isin(self.result.display_labels, self.result.metadata["sherd_collision"]["conflicting_ids"])
+            if np.any(conflict):
+                self.plotter.add_points(pv.PolyData(p[conflict]),color="red",point_size=4)
+            valid = np.isfinite(self.result.point_residual_mm) & ~conflict
 
             if np.any(valid):
                 pv_valid = pv.PolyData(p[valid])
                 pv_valid["residual_mm"] = self.result.point_residual_mm[valid]
                 clim_hi = max(3.0,float(np.nanquantile(self.result.point_residual_mm[valid],0.90)))
                 self.plotter.add_points(pv_valid,scalars="residual_mm",cmap="viridis",clim=[0.0,clim_hi],point_size=3.0,render_points_as_spheres=False)
-            if np.any(~valid):
-                pv_bad = pv.PolyData(p[~valid])
+            if np.any(~valid & ~conflict):
+                pv_bad = pv.PolyData(p[~valid & ~conflict])
                 self.plotter.add_points(pv_bad,color="lightgray",point_size=2.5,render_points_as_spheres=False)
 
             if len(self.result.mesh_vertices_mm) and len(self.result.mesh_faces):
@@ -2211,7 +2267,7 @@ def launch_gui(initial_input: Path | None = None):
             if self.result is None:QtWidgets.QMessageBox.information(self,"未解析","先に解析を実行してください。");return
             d=QtWidgets.QFileDialog.getExistingDirectory(self,"出力先フォルダを選択",str(self.source_path.parent))
             if not d:return
-            out=Path(d)/f"{self.source_path.stem}_Reconstruction3D_v024"
+            out=Path(d)/f"{self.source_path.stem}_Reconstruction3D_v026"
             try:export_result(self.result,out);self._log(f"Exported: {out}");QtWidgets.QMessageBox.information(self,"書き出し完了",str(out))
             except Exception as exc:QtWidgets.QMessageBox.critical(self,"書き出しエラー",str(exc))
 
@@ -2298,16 +2354,18 @@ def self_test():
 
 def main():
     ap=argparse.ArgumentParser(description="Reconstruct an axisymmetric vessel from sherds while preserving their current meaningful placement.")
-    ap.add_argument("input",nargs="?",type=Path,help="Input PLY/OBJ. Omit to open in GUI.")
+    ap.add_argument("input",nargs="*",type=Path,help="Input PLY/OBJ files in one coordinate system. Omit to open in GUI.")
+    ap.add_argument("--collision-only",action="store_true",help="Audit sherd placement without estimating a vessel. Exit 2 on penetration.")
+    ap.add_argument("--collision-tolerance-mm",type=float,default=DEFAULT_TOLERANCE_MM)
     ap.add_argument("--input-unit",choices=["mm","cm","m"],default="m")
     ap.add_argument("--export-unit",choices=["mm","cm","m"],default="m")
     ap.add_argument("--headless",action="store_true")
     ap.add_argument("--output-dir",type=Path)
     ap.add_argument("--display-points",type=int,default=220000)
     ap.add_argument("--face-samples",type=int,default=320000)
-    ap.add_argument("--cluster-voxel-mm",type=float,default=1.5)
-    ap.add_argument("--cluster-link-radius-vox",type=float,default=2.1)
-    ap.add_argument("--min-fragment-sample-points",type=int,default=400)
+    ap.add_argument("--cluster-voxel-mm",type=float,default=1.5,help=argparse.SUPPRESS)
+    ap.add_argument("--cluster-link-radius-vox",type=float,default=2.1,help=argparse.SUPPRESS)
+    ap.add_argument("--min-fragment-sample-points",type=int,default=400,help=argparse.SUPPRESS)
     ap.add_argument("--profile-bin-mm",type=float,default=2.0)
     ap.add_argument("--compatibility-max",type=float,default=0.30)
     ap.add_argument("--radial-sign-min",type=float,default=0.18)
@@ -2323,13 +2381,22 @@ def main():
     ap.add_argument("--version",action="version",version=f"%(prog)s {__version__}")
     args=ap.parse_args()
     if args.self_test:self_test();return
+    if args.collision_only:
+        if not args.input: ap.error("--collision-only requires input")
+        _, assembly = load_placement(args.input, args.input_unit, args.collision_tolerance_mm)
+        report = assembly.audit()
+        out = args.output_dir or args.input[0].with_name(f"{args.input[0].stem}_SherdCollision")
+        out.mkdir(parents=True, exist_ok=True)
+        write_collision_report(out, report)
+        print(collision_message(report))
+        return 2 if report["status"] == "penetration" else 0
     if args.headless:
-        if args.input is None:ap.error("--headless requires input")
-        out=args.output_dir or args.input.parent/f"{args.input.stem}_Reconstruction3D_v023"
-        r=run_reconstruction(args.input,input_unit=args.input_unit,export_unit_name=args.export_unit,display_points=args.display_points,face_samples=args.face_samples,cluster_voxel_mm=args.cluster_voxel_mm,cluster_link_radius_vox=args.cluster_link_radius_vox,min_fragment_sample_points=args.min_fragment_sample_points,profile_bin_mm=args.profile_bin_mm,compatibility_max=args.compatibility_max,radial_sign_min=args.radial_sign_min,thickness_min_mm=args.thickness_min_mm,thickness_max_mm=args.thickness_max_mm,profile_max_gap_mm=args.profile_max_gap_mm,profile_smooth_window_bins=args.profile_smooth_window_bins,axis_search_directions=args.axis_search_directions,axis_surface_keep_fraction=args.axis_surface_keep_fraction,axis_objective_bin_mm=args.axis_objective_bin_mm,mesh_angle_step_deg=args.mesh_angle_step_deg)
+        if not args.input:ap.error("--headless requires input")
+        out=args.output_dir or args.input[0].parent/f"{args.input[0].stem}_Reconstruction3D_v026"
+        r=run_reconstruction(args.input,collision_tolerance_mm=args.collision_tolerance_mm,input_unit=args.input_unit,export_unit_name=args.export_unit,display_points=args.display_points,face_samples=args.face_samples,cluster_voxel_mm=args.cluster_voxel_mm,cluster_link_radius_vox=args.cluster_link_radius_vox,min_fragment_sample_points=args.min_fragment_sample_points,profile_bin_mm=args.profile_bin_mm,compatibility_max=args.compatibility_max,radial_sign_min=args.radial_sign_min,thickness_min_mm=args.thickness_min_mm,thickness_max_mm=args.thickness_max_mm,profile_max_gap_mm=args.profile_max_gap_mm,profile_smooth_window_bins=args.profile_smooth_window_bins,axis_search_directions=args.axis_search_directions,axis_surface_keep_fraction=args.axis_surface_keep_fraction,axis_objective_bin_mm=args.axis_objective_bin_mm,mesh_angle_step_deg=args.mesh_angle_step_deg)
         export_result(r,out);print(f"Exported: {out}");return
-    launch_gui(args.input)
+    launch_gui(args.input, args.input_unit, args.export_unit)
 
 
 if __name__=="__main__":
-    main()
+    raise SystemExit(main())

@@ -8,7 +8,7 @@
     },
     {
       "path": "DevelopmentReport.md",
-      "sha256": "b4d09ce7183360645da8481be8f7eb83277878e94543c836eb2871ee9ddb46bc",
+      "sha256": "46f3294d9339c5569d2ec55e141d5badbb740fca8c4e77c7c7e763870b1e6e74",
       "origin": "integration work 2026-10-05",
       "last_modified_on": "2026-11-12"
     },
@@ -25,7 +25,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "1da58b1e662ad36262b43c088e48b930edbe9b6e00228957a5b88aeff0e52659",
+      "sha256": "9fcd91352303958ddbbf16465f617e0f866a4f6154446ed63cd41c8cefd83572",
       "origin": "integration work 2026-10-05",
       "last_modified_on": "2026-11-12"
     },
@@ -73,12 +73,15 @@
     },
     {
       "path": "pottery_guidefit_reconstruction.py",
-      "sha256": "e77fefd106b237fa437a02a42bba122c3f0bc528f7178e8d0da5c40ec6846b29",
+      "sha256": "be79d37d50ebae6785f06b0ce8d7f1f27e875a2445e62054ef1ba2399b7bb9df",
       "origin": "previously distributed PotteryReconstruction3D_GuideFit_v0.1.0.zip",
       "upstream_ref": null,
       "upstream_version": "v0.1.0",
       "upstream_sha256": "e77fefd106b237fa437a02a42bba122c3f0bc528f7178e8d0da5c40ec6846b29",
-      "modified": false
+      "modified": true,
+      "last_modified_on": "2026-11-12",
+      "local_version": "0.1.1",
+      "modification_note": "Add multi-mesh sherd identity and collision diagnostics or collision-constrained guide fitting."
     },
     {
       "path": "pottery_multiscale_features.py",
@@ -103,12 +106,15 @@
     },
     {
       "path": "pottery_reconstruction_3d.py",
-      "sha256": "44cb08674f67e3a4f5a5d1e7ea7109836f94b95b6238fa39ffc195a753c331ab",
+      "sha256": "646803836cf4f85793d10c417072806a88138bfe451e8c8b26be77ed82bbdbd9",
       "origin": "previously distributed PotteryReconstruction3D_GuideFit_v0.1.0.zip",
       "upstream_ref": null,
       "upstream_version": "v0.2.5",
       "upstream_sha256": "44cb08674f67e3a4f5a5d1e7ea7109836f94b95b6238fa39ffc195a753c331ab",
-      "modified": false
+      "modified": true,
+      "last_modified_on": "2026-11-12",
+      "local_version": "0.2.6",
+      "modification_note": "Add multi-mesh sherd identity and collision diagnostics or collision-constrained guide fitting."
     },
     {
       "path": "pottery_section_guide.py",
@@ -159,8 +165,9 @@
     },
     {
       "path": "requirements.txt",
-      "sha256": "c39b8773efcad2b392a5709737da9327a209b06cadd0f5f38249d4095de28887",
-      "origin": "integration work 2026-10-05"
+      "sha256": "0e75204c06b9397702695be83463c57080af0492fbea9a0ab741f7611ce4129c",
+      "origin": "integration work 2026-10-05",
+      "last_modified_on": "2026-11-12"
     },
     {
       "path": "tests/test_asset_metadata.py",
@@ -327,6 +334,18 @@
       "path": "tests/test_volume_migration.py",
       "origin": "MorphPot capacity migration",
       "sha256": "68ec3f0a6d74514a8da50b3bc45669bc91513edd7e3c33e52506e43770ca6f24",
+      "last_modified_on": "2026-11-12"
+    },
+    {
+      "path": "morphpot/sherd_collision.py",
+      "origin": "MorphPot development 2026-11-12",
+      "sha256": "828d9004b437ba2d0cd6bf3b1646a5fcebbbfca5b1cbd6a876633e46e325eae7",
+      "last_modified_on": "2026-11-12"
+    },
+    {
+      "path": "tests/test_sherd_collision.py",
+      "origin": "MorphPot development 2026-11-12",
+      "sha256": "7d2beb5f037a9b116c44927f161fbc55fabcc5ea267015d21ecb764901cdc74c",
       "last_modified_on": "2026-11-12"
     }
   ]

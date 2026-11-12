@@ -32,7 +32,7 @@ import math
 import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Sequence
 
 import numpy as np
 
@@ -44,7 +44,7 @@ except ModuleNotFoundError as exc:
         "pottery_reconstruction_3d.py"
     ) from exc
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 
 # -----------------------------------------------------------------------------
@@ -98,6 +98,8 @@ class SherdGuideFit:
     inner_median_after_mm: float | None
     matrix_mm: np.ndarray
     matrix_input_units: np.ndarray
+    collision_blocked_by: tuple[int, ...] = ()
+    placement_fraction: float | None = None
 
 
 @dataclass
@@ -423,7 +425,8 @@ def fit_fragment_to_guide_vessel(result: base.ReconstructionResult,
                                  min_surface_samples: int = 30,
                                  compatibility_max: float = 0.35,
                                  radial_sign_min: float = 0.12,
-                                 max_samples_per_surface: int = 5000) -> SherdGuideFit:
+                                 max_samples_per_surface: int = 5000,
+                                 placement: base.Placement | None = None) -> SherdGuideFit:
     """Fit one sherd by simultaneous equal-weight outer+inner surface agreement."""
     samples = extract_fragment_outer_inner_samples(
         result, fragment_id,
@@ -459,6 +462,7 @@ def fit_fragment_to_guide_vessel(result: base.ReconstructionResult,
     # Current pose is an informative starting state, not a penalty term.
     grid = np.arange(-abs(radial_search_limit_mm), abs(radial_search_limit_mm) + radial_grid_step_mm * 0.5,
                      max(0.1, radial_grid_step_mm))
+    grid = np.unique(np.clip(grid, -abs(radial_search_limit_mm), abs(radial_search_limit_mm)))
     vals = np.array([objective(np.array([g, 0.0, 0.0])) for g in grid], float)
     x0 = np.array([float(grid[int(np.argmin(vals))]), 0.0, 0.0])
 
@@ -475,6 +479,35 @@ def fit_fragment_to_guide_vessel(result: base.ReconstructionResult,
     except Exception:
         pass
 
+    blocked_by = set()
+    fraction = None
+    collision_status = None
+    if placement is not None:
+        # Try the optimized pose, then shorter rigid moves using the same
+        # parameters (no matrix interpolation and no new degrees of freedom).
+        # Additional radial-only alternatives can avoid an obstructed tilt.
+        candidates = [(xbest * f, f) for f in (1.0, 0.75, 0.5, 0.25, 0.125, 0.0625)]
+        candidates += [(np.array([grid[j], 0.0, 0.0]), None)
+                       for j in np.argsort(vals, kind="stable")[:5]]
+        baseline = float(before["combined"])
+        scored = sorted(((objective(x), x, f) for x, f in candidates), key=lambda item: item[0])
+        xbest = np.zeros(3)
+        collision_status = "no_improvement" if np.isfinite(baseline) else "no_guide_overlap"
+        seen = set()
+        for score, x, f in scored:
+            key = tuple(x.round(8))
+            if key in seen or not any(key) or score >= min(baseline, 1e6) - 1e-6:
+                continue
+            seen.add(key)
+            _, candidate = _fragment_transform(centroid, er, et, a, *map(float, x))
+            hits = placement.conflicts(fragment_id, candidate)
+            if hits:
+                blocked_by.update(hits)
+                collision_status = "blocked_collision"
+                continue
+            xbest, fraction, collision_status = x, f, "ok"
+            break
+
     dr, tr, tt = map(float, xbest)
     _, M = _fragment_transform(centroid, er, et, a, dr, tr, tt)
     after = _dual_surface_metrics(apply_mm_matrix(po, M), apply_mm_matrix(pi, M), vessel)
@@ -486,7 +519,7 @@ def fit_fragment_to_guide_vessel(result: base.ReconstructionResult,
     Min[:3, :3] = M[:3, :3]
     Min[:3, 3] = M[:3, 3] / s
 
-    status = "ok" if np.isfinite(after["combined"]) else "no_guide_overlap"
+    status = collision_status or ("ok" if np.isfinite(after["combined"]) else "no_guide_overlap")
     return SherdGuideFit(
         fragment_id=fragment_id,
         status=status,
@@ -506,6 +539,8 @@ def fit_fragment_to_guide_vessel(result: base.ReconstructionResult,
         inner_median_after_mm=None if not np.isfinite(after["inner_median"]) else after["inner_median"],
         matrix_mm=M,
         matrix_input_units=Min,
+        collision_blocked_by=tuple(sorted(blocked_by)),
+        placement_fraction=fraction,
     )
 
 
@@ -517,19 +552,29 @@ def fit_all_fragments(result: base.ReconstructionResult,
                       min_surface_samples: int = 30,
                       progress: Callable[[str], None] | None = None) -> dict[int, SherdGuideFit]:
     out = {}
+    if not result.sherd_meshes or set(result.sherd_meshes) != {c.fragment_id for c in result.clusters}:
+        raise ValueError("破片の三角形メッシュとIDを確認できません。1破片1ファイルで再読込してください。")
+    current = result.metadata["sherd_collision"]
+    if current["status"] == "penetration":
+        raise ValueError(base.collision_message(current) + "。初期配置を修正してからGuide Fitを実行してください。")
+    placement = base.Placement(result.sherd_meshes, current["tolerance_mm"])
     for cl in result.clusters:
         fit = fit_fragment_to_guide_vessel(
             result, vessel, cl.fragment_id,
             tilt_limit_deg=tilt_limit_deg,
             radial_search_limit_mm=radial_search_limit_mm,
             radial_grid_step_mm=radial_grid_step_mm,
-            min_surface_samples=min_surface_samples,
+            min_surface_samples=min_surface_samples, placement=placement,
         )
         out[cl.fragment_id] = fit
+        if fit.status == "ok":
+            placement.poses[cl.fragment_id] = fit.matrix_mm
         if progress:
+            if fit.collision_blocked_by:
+                progress(f"fragment {cl.fragment_id}: めり込む候補を除外 (ID: {', '.join(map(str, fit.collision_blocked_by))})")
             if fit.status == "ok":
                 progress(
-                    f"fragment {cl.fragment_id}: combined {fit.combined_before_mm:.3f} -> "
+                    f"fragment {cl.fragment_id}: combined {fit.combined_before_mm if fit.combined_before_mm is not None else 'N/A'} -> "
                     f"{fit.combined_after_mm:.3f} mm / radial {fit.radial_shift_mm:+.3f} mm / "
                     f"tilt {fit.tilt_radial_deg:+.3f}, {fit.tilt_tangential_deg:+.3f} deg"
                 )
@@ -565,10 +610,32 @@ def _write_profile_csv(path: Path, vessel: GuideDerivedVessel) -> None:
 
 
 def export_guidefit_session(session: GuideFitSession, out: Path) -> None:
-    out = Path(out); out.mkdir(parents=True, exist_ok=True)
+    out = Path(out)
     r = session.reconstruction
     v = session.guide_vessel
     s = base.export_scale(r.export_unit)
+    initial = r.metadata.get("sherd_collision")
+    final = None
+    if session.sherd_fits:
+        if not initial or not r.sherd_meshes or set(session.sherd_fits) != set(r.sherd_meshes):
+            raise ValueError("Fitted placement cannot be exported without all sherd collision meshes.")
+        assembly = base.Placement(r.sherd_meshes, initial["tolerance_mm"])
+        for fid, fit in session.sherd_fits.items():
+            if fit.status == "ok":
+                assembly.poses[fid] = fit.matrix_mm
+        final = assembly.audit()
+        if final["status"] == "penetration":
+            raise ValueError(base.collision_message(final) + "。配置済み破片は書き出しません。")
+    out.mkdir(parents=True, exist_ok=False)
+    if initial:
+        base.write_collision_report(out, {"initial": initial, "fitted": final})
+    if final:
+        mesh_dir = out / "fitted_sherd_meshes"
+        mesh_dir.mkdir(exist_ok=True)
+        for fid, sherd in r.sherd_meshes.items():
+            vertices = apply_mm_matrix(sherd.mesh.vertices, assembly.poses[fid])
+            base.write_ply_mesh(mesh_dir / f"fragment_{fid:03d}.ply", vertices * s,
+                                sherd.mesh.faces, coordinate_unit=r.export_unit, double_precision=True)
 
     # Explicitly separate the two reconstructed vessels.
     base.write_ply_mesh(out / "vessel_SHERD_DERIVED.ply",
@@ -607,7 +674,7 @@ def export_guidefit_session(session: GuideFitSession, out: Path) -> None:
             "axial_shift_mm","circumferential_shift_deg","outer_n","inner_n",
             "outer_rmse_before_mm","inner_rmse_before_mm","combined_before_mm",
             "outer_rmse_after_mm","inner_rmse_after_mm","combined_after_mm",
-            "outer_median_after_mm","inner_median_after_mm",
+            "outer_median_after_mm","inner_median_after_mm","collision_blocked_by","placement_fraction",
         ] + [f"mm_m{a}{b}" for a in range(4) for b in range(4)] + \
             [f"input_m{a}{b}" for a in range(4) for b in range(4)]
         with (out / "sherd_guidefit_transforms.csv").open("w", newline="", encoding="utf-8-sig") as f:
@@ -615,6 +682,7 @@ def export_guidefit_session(session: GuideFitSession, out: Path) -> None:
             for fid in sorted(session.sherd_fits):
                 q = session.sherd_fits[fid]
                 row = {k: getattr(q, k) for k in fields if hasattr(q, k)}
+                row["collision_blocked_by"] = ";".join(map(str, q.collision_blocked_by))
                 for a in range(4):
                     for b in range(4):
                         row[f"mm_m{a}{b}"] = float(q.matrix_mm[a,b])
@@ -643,6 +711,8 @@ def export_guidefit_session(session: GuideFitSession, out: Path) -> None:
             "inner_ring_count": v.inner_ring_count,
             "unknown_ring_count": v.unknown_ring_count,
         },
+        "sherd_collision": {"initial_status": initial["status"] if initial else None,
+                            "fitted_status": final["status"] if final else None},
         "sherd_fits": {str(k): base.jsonable(asdict(x)) for k, x in session.sherd_fits.items()},
     }
     (out / "guidefit_metadata.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -652,7 +722,7 @@ def export_guidefit_session(session: GuideFitSession, out: Path) -> None:
 # GUI
 # -----------------------------------------------------------------------------
 
-def launch_gui(initial_input: Path | None = None):
+def launch_gui(initial_input: Sequence[Path] = ()):
     try:
         from PySide6 import QtCore, QtWidgets
         import pyvista as pv
@@ -665,7 +735,8 @@ def launch_gui(initial_input: Path | None = None):
             super().__init__()
             self.setWindowTitle(f"PotteryGuideFitReconstruction v{__version__}")
             self.resize(1580, 960)
-            self.source_path: Path | None = Path(initial_input) if initial_input else None
+            self.source_paths = [Path(initial_input)] if isinstance(initial_input, (str, Path)) else list(initial_input)
+            self.source_path: Path | None = self.source_paths[0] if self.source_paths else None
             self.result: base.ReconstructionResult | None = None
             self.guide: base.GuideRingSet | None = None
             self.reg: base.GuideRegistration | None = None
@@ -687,8 +758,7 @@ def launch_gui(initial_input: Path | None = None):
 
             self.display_points = self._spin("表示点数", 20000, 800000, 220000, 20000)
             self.face_samples = self._spin("解析face sample", 20000, 1000000, 320000, 20000)
-            self.cluster_voxel = self._dspin("破片分離 voxel [mm]", 0.2, 10.0, 1.5, 0.1, 2)
-            self.min_frag = self._spin("最小sample点数", 30, 50000, 400, 50)
+            self.collision_tol = self._dspin("めり込み許容値 [mm]", 0.001, 2, base.DEFAULT_TOLERANCE_MM, 0.01, 3)
 
             self.analyze_btn = QtWidgets.QPushButton("2  固定配置解析（Sherd-derived）")
             self.analyze_btn.clicked.connect(self.analyze_baseline); form.addWidget(self.analyze_btn)
@@ -729,8 +799,8 @@ def launch_gui(initial_input: Path | None = None):
             self.export_btn = QtWidgets.QPushButton("7  GuideFit結果を書き出す")
             self.export_btn.clicked.connect(self.export_dialog); form.addWidget(self.export_btn)
 
-            self.table = QtWidgets.QTableWidget(0, 8)
-            self.table.setHorizontalHeaderLabels(["ID","outer N","inner N","before","after","radial","tilt R","tilt T"])
+            self.table = QtWidgets.QTableWidget(0, 9)
+            self.table.setHorizontalHeaderLabels(["ID","outer N","inner N","before","after","radial","tilt R","tilt T","status"])
             self.table.horizontalHeader().setStretchLastSection(True); self.table.setMinimumHeight(210); form.addWidget(self.table)
             self.status = QtWidgets.QPlainTextEdit(); self.status.setReadOnly(True); self.status.setMaximumBlockCount(1000); form.addWidget(self.status, 1)
 
@@ -750,9 +820,11 @@ def launch_gui(initial_input: Path | None = None):
             self.status.appendPlainText(str(text)); QtWidgets.QApplication.processEvents()
 
         def open_dialog(self):
-            fn,_ = QtWidgets.QFileDialog.getOpenFileName(self,"土器破片3Dモデル","","Mesh (*.ply *.obj);;All files (*)")
-            if fn:
-                self.source_path=Path(fn); self.result=None; self.guide_vessel=None; self.fits={}; self._log(f"Input: {self.source_path}")
+            files,_ = QtWidgets.QFileDialog.getOpenFileNames(self,"土器破片3Dモデル（複数選択可）","","Mesh (*.ply *.obj)")
+            if files:
+                self.source_paths=[Path(fn) for fn in files]; self.source_path=self.source_paths[0]
+                self.result=None; self.reg=None; self.guide_vessel=None; self.fits={}
+                self._log(f"Input: {self.source_paths}")
 
         def analyze_baseline(self):
             if self.source_path is None: self.open_dialog()
@@ -760,13 +832,12 @@ def launch_gui(initial_input: Path | None = None):
             try:
                 self._log("--- fixed-placement baseline reconstruction ---")
                 self.result = base.run_reconstruction(
-                    self.source_path,
+                    self.source_paths, collision_tolerance_mm=self.collision_tol.value(),
                     input_unit=self.input_unit.currentText(), export_unit_name=self.output_unit.currentText(),
                     display_points=self.display_points.value(), face_samples=self.face_samples.value(),
-                    cluster_voxel_mm=self.cluster_voxel.value(), min_fragment_sample_points=self.min_frag.value(),
                     progress=self._log,
                 )
-                self.guide_vessel=None; self.fits={}; self.render_current(reset_camera=True)
+                self.reg=None; self.guide_vessel=None; self.fits={}; self.render_current(reset_camera=True)
             except Exception as exc:
                 QtWidgets.QMessageBox.critical(self,"解析エラー",str(exc)); self._log(f"ERROR: {exc}")
 
@@ -834,7 +905,7 @@ def launch_gui(initial_input: Path | None = None):
             self.table.setRowCount(len(self.result.clusters))
             for row, cl in enumerate(self.result.clusters):
                 q=self.guide_vessel.current_fragment_quality.get(cl.fragment_id,{})
-                vals=[cl.fragment_id,"","",q.get("rmse_mm",""),"","","",""]
+                vals=[cl.fragment_id,"","",q.get("rmse_mm",""),"","","","",""]
                 for c,v in enumerate(vals): self.table.setItem(row,c,QtWidgets.QTableWidgetItem(str(v)))
 
         def _populate_table_fits(self):
@@ -843,12 +914,12 @@ def launch_gui(initial_input: Path | None = None):
             for row,cl in enumerate(self.result.clusters):
                 q=self.fits.get(cl.fragment_id)
                 if q is None:
-                    vals=[cl.fragment_id,"","","","","","",""]
+                    vals=[cl.fragment_id,"","","","","","","",""]
                 else:
                     vals=[q.fragment_id,q.outer_n,q.inner_n,
                           "" if q.combined_before_mm is None else f"{q.combined_before_mm:.3f}",
                           "" if q.combined_after_mm is None else f"{q.combined_after_mm:.3f}",
-                          f"{q.radial_shift_mm:+.3f}",f"{q.tilt_radial_deg:+.3f}",f"{q.tilt_tangential_deg:+.3f}"]
+                          f"{q.radial_shift_mm:+.3f}",f"{q.tilt_radial_deg:+.3f}",f"{q.tilt_tangential_deg:+.3f}",q.status]
                 for c,v in enumerate(vals): self.table.setItem(row,c,QtWidgets.QTableWidgetItem(str(v)))
 
         def _add_polyline(self, pts, color, width=2):
@@ -880,6 +951,8 @@ def launch_gui(initial_input: Path | None = None):
             if self.show_mode.currentText()=="FITTED placement" and self.fits:
                 pmm=fitted_display_points(self.result,self.fits)
             if self.chk_sherds.isChecked():
+                ids = self.result.metadata["sherd_collision"]["conflicting_ids"]
+                conflict = np.isin(self.result.display_labels, ids)
                 poly=pv.PolyData(pmm*sc)
                 if self.chk_residual.isChecked() and self.guide_vessel is not None:
                     res,_=base.evaluate_point_residuals(pmm,self.guide_vessel.axis,self.guide_vessel.profile)
@@ -890,6 +963,8 @@ def launch_gui(initial_input: Path | None = None):
                     rgb=np.zeros((len(pmm),3),np.uint8)
                     for cl in self.result.clusters: rgb[self.result.display_labels==cl.fragment_id]=base.fragment_color(cl.fragment_id)
                     poly["rgb"]=rgb; self.plotter.add_points(poly,scalars="rgb",rgb=True,point_size=3.0,render_points_as_spheres=False)
+                if conflict.any():
+                    self.plotter.add_points(pv.PolyData(pmm[conflict]*sc),color="red",point_size=5)
             if self.chk_sherd_vessel.isChecked():
                 self._add_mesh(self.result.mesh_vertices_mm,self.result.mesh_faces,sc,"lightgray",0.18)
             if self.chk_guide_vessel.isChecked() and self.guide_vessel is not None:
@@ -915,7 +990,11 @@ def launch_gui(initial_input: Path | None = None):
             start=str(self.source_path.parent) if self.source_path else str(Path.cwd())
             d=QtWidgets.QFileDialog.getExistingDirectory(self,"GuideFit出力先",start)
             if not d:return
-            out=Path(d)/f"{self.source_path.stem}_GuideFit_v010"
+            out=Path(d)/f"{self.source_path.stem}_GuideFit_v011"
+            serial=2
+            while out.exists():
+                out=Path(d)/f"{self.source_path.stem}_GuideFit_v011_{serial}"
+                serial+=1
             try:
                 session=GuideFitSession(self.result,self.guide,self.reg,self.guide_vessel,self.fits)
                 export_guidefit_session(session,out)
@@ -987,7 +1066,7 @@ def self_test():
         raise SystemExit(f"SELF TEST FAILED radial shift {fit.radial_shift_mm}")
     if abs(fit.axial_shift_mm)>1e-12 or abs(fit.circumferential_shift_deg)>1e-12:
         raise SystemExit("SELF TEST FAILED fixed DOF")
-    print("PotteryGuideFitReconstruction v0.1.0 SELF TEST PASSED")
+    print(f"PotteryGuideFitReconstruction v{__version__} SELF TEST PASSED")
     print(f"combined RMSE : {fit.combined_before_mm:.4f} -> {fit.combined_after_mm:.4f} mm")
     print(f"radial shift  : {fit.radial_shift_mm:+.4f} mm")
     print(f"tilt          : {fit.tilt_radial_deg:+.4f}, {fit.tilt_tangential_deg:+.4f} deg")
@@ -1001,7 +1080,7 @@ def self_test():
 
 def main():
     ap=argparse.ArgumentParser(description="Guide-derived pottery vessel reconstruction and dual-surface sherd fitting")
-    ap.add_argument("input",nargs="?",type=Path,help="Input sherd PLY/OBJ; omit to choose in GUI")
+    ap.add_argument("input",nargs="*",type=Path,help="Input sherd PLY/OBJ files; omit to choose in GUI")
     ap.add_argument("--self-test",action="store_true")
     ap.add_argument("--version",action="version",version=f"%(prog)s {__version__}")
     args=ap.parse_args()
