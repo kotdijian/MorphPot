@@ -68,10 +68,20 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 
 Reconstruction v0.2.6、Guide Fit v0.1.1では、同じ座標系・単位に仮配置した破片のPLY／OBJを複数選択できます。**1破片1ファイルを推奨**します。複数ファイルはそれぞれを1破片とし、単一ファイルでは面が辺を共有する連結成分を別破片として扱います。破片同士を溶接して1成分にすると、その間は判定できません。点群だけでは判定できないため、三角形メッシュを使用してください。
 
+**Windows（PowerShell）**
+
+```powershell
+py -m pip install -r requirements-gui.txt
+py pottery_reconstruction_3d.py
+py pottery_guidefit_reconstruction.py
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python -m pip install -r requirements-gui.txt
-python pottery_reconstruction_3d.py
-python pottery_guidefit_reconstruction.py
+python3 -m pip install -r requirements-gui.txt
+python3 pottery_reconstruction_3d.py
+python3 pottery_guidefit_reconstruction.py
 ```
 
 - **Reconstruction**：現在配置を表示・解析する際に衝突ペアを記録し、該当する破片を赤で表示します。入力の配置は変えません。赤い破片があれば、外部で仮配置を直して再読込できます。
@@ -80,8 +90,16 @@ python pottery_guidefit_reconstruction.py
 
 器形推定を行わず、配置だけを先に確認できます。GUIを使わない場合は `requirements.txt` の依存関係で実行できます。
 
+**Windows（PowerShell）**
+
+```powershell
+py pottery_reconstruction_3d.py "sherd_a.ply" "sherd_b.obj" --input-unit mm --collision-only --output-dir collision_check
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python pottery_reconstruction_3d.py "sherd_a.ply" "sherd_b.obj" \
+python3 pottery_reconstruction_3d.py "sherd_a.ply" "sherd_b.obj" \
   --input-unit mm --collision-only --output-dir collision_check
 ```
 
@@ -93,12 +111,21 @@ python pottery_reconstruction_3d.py "sherd_a.ply" "sherd_b.obj" \
 
 ArchMorphの土器容量計算はMorphPotで保守します。旧PotteryVolumeCalculatorのvoxel v1.4.0を統合し、単一メッシュ・複数ピッチの検証に加え、同じ資料のAOM Rim／Base／Slice出力を比較できます。
 
-```bash
-python MorphPot.py volume "/path/to/pot_rev.ply" --unit auto --pitch 1
-python MorphPot.py volume --compare-poses "/path/to/rim_export" "/path/to/base_export" --output-dir pot_pose_comparison
+**Windows（PowerShell）**
+
+```powershell
+py MorphPot.py volume "C:/path/to/pot_rev.ply" --unit auto --pitch 1
+py MorphPot.py volume --compare-poses "C:/path/to/rim_export" "C:/path/to/base_export" --output-dir pot_pose_comparison
 ```
 
-単位・出力・移管前の検証記録は[容量計算ガイド](docs/capacity/README.md)（[English](docs/capacity/README_EN.md)）を参照してください。断面法は `MorphPot.py sections`、2D実測図は `python pottery_drawing_capacity.py` を使います。
+**macOS（ターミナル）**
+
+```bash
+python3 MorphPot.py volume "/path/to/pot_rev.ply" --unit auto --pitch 1
+python3 MorphPot.py volume --compare-poses "/path/to/rim_export" "/path/to/base_export" --output-dir pot_pose_comparison
+```
+
+単位・出力・移管前の検証記録は[容量計算ガイド](docs/capacity/README.md)（[English](docs/capacity/README_EN.md)）を参照してください。断面法は `MorphPot.py sections`、2D実測図は `pottery_drawing_capacity.py` を使います。
 
 <a id="surface-trace"></a>
 
@@ -106,8 +133,16 @@ python MorphPot.py volume --compare-poses "/path/to/rim_export" "/path/to/base_e
 
 土器表面の多尺度形状特徴と痕跡候補の解析は、今後MorphPotで開発します。姿勢正規化済みのPLYを指定して実行します。
 
+**Windows（PowerShell）**
+
+```powershell
+py MorphPot.py surface-trace "C:/path/to/pot001_rev.ply" --unit auto
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python MorphPot.py surface-trace "/path/to/pot001_rev.ply" --unit auto
+python3 MorphPot.py surface-trace "/path/to/pot001_rev.ply" --unit auto
 ```
 
 `--unit auto` は入力に付随するメタデータから座標単位を読み取ります。メタデータがない場合は、実際の単位に合わせて `--unit m` などを指定してください。結果はPLYとJSON等に保存されます。分類は隆起や凹みなどの形態的特徴を表します。
@@ -126,30 +161,56 @@ OrthoMakerで姿勢正規化した、内外面を含む土器の三角形メッ�
 
 モデルを再回転・再正規化する必要はありません。器軸の傾きは診断値として出力し、自動補正しません。内面のないモデルや断面が閉じない破片では、内面による器軸推定・容量計算が成立しない場合があります。
 
-リポジトリのフォルダで、次を実行します（macOS／Linux）。
+リポジトリのフォルダで、使用するOSの手順を実行します。
+
+**Windows（PowerShell）**
+
+```powershell
+py -m venv venv
+.\venv\Scripts\Activate.ps1
+py -m pip install -r requirements.txt
+```
+
+**macOS（ターミナル）**
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-python -m pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
-Windowsでは環境の有効化を `venv\Scripts\Activate.ps1` に読み替えてください。この断面解析にはGUI用の追加依存は不要です。
+この断面解析にはGUI用の追加依存は不要です。
 
 <a id="basic-usage"></a>
 
 ### 2. 基本操作：器軸・断面・容量をまとめて計算する
 
+**Windows（PowerShell）**
+
+```powershell
+py MorphPot.py sections "C:/path/to/pot001_rev.ply" --unit auto
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto
+python3 MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto
 ```
 
 `/path/to/pot001_rev.ply` は実際の入力ファイルのパスに置き換えてください。空白を含むパスは引用符で囲みます。
 
 `auto` は同名の `pot001_rev.asset.json`、または隣接する従来の `transform.json` から単位を取得します。metadataの読込契約は[DevelopmentReport](DevelopmentReport.md#4-入出力単位の現段階)を参照してください。単位が不明なら停止します。metadataがない場合は、**座標値の実際の単位**を指定します。
 
+**Windows（PowerShell）**
+
+```powershell
+py MorphPot.py sections "C:/path/to/pot001_rev.ply" --unit m
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python MorphPot.py sections "/path/to/pot001_rev.ply" --unit m
+python3 MorphPot.py sections "/path/to/pot001_rev.ply" --unit m
 ```
 
 正規化済みPLYでも単位がmmとは限りません。`--unit` は入力単位の宣言であり、姿勢Transformを再適用するオプションではありません。`--z-step-mm` など末尾が `-mm` の間隔は、入力単位にかかわらずmmで指定します。
@@ -162,28 +223,60 @@ python MorphPot.py sections "/path/to/pot001_rev.ply" --unit m
 
 **容量を計算せず、器軸と断面だけを取得：**
 
+**Windows（PowerShell）**
+
+```powershell
+py MorphPot.py sections "C:/path/to/pot001_rev.ply" --unit auto --volume-mode none
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode none
+python3 MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode none
 ```
 
 **水平断面を5mm間隔、縦断面を15°間隔にする：**
 
+**Windows（PowerShell）**
+
+```powershell
+py MorphPot.py sections "C:/path/to/pot001_rev.ply" --unit auto --z-step-mm 5 --angle-step 15 --output-dir "results/pot001_sections15"
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --z-step-mm 5 --angle-step 15 --output-dir "results/pot001_sections15"
+python3 MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --z-step-mm 5 --angle-step 15 --output-dir "results/pot001_sections15"
 ```
 
 **内外面を比較して器軸を確認：**
 
+**Windows（PowerShell）**
+
+```powershell
+py MorphPot.py sections "C:/path/to/pot001_rev.ply" --unit auto --axis-surface both --volume-mode none
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --axis-surface both --volume-mode none
+python3 MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --axis-surface both --volume-mode none
 ```
 
 `both` は内外面の中心差を確認する設定で、最終器軸には内面中心を使います。外面のみで器軸位置を求める場合は `--axis-surface outer` を指定します。外面モードでも器厚から内面を自動復元する機能はありません。
 
 **容量方式を選択：**
 
+**Windows（PowerShell）**
+
+```powershell
+py MorphPot.py sections "C:/path/to/pot001_rev.ply" --unit auto --volume-mode single angular --single-angle 45 --volume-z-step-mm 0.5
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode single angular --single-angle 45 --volume-z-step-mm 0.5
+python3 MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode single angular --single-angle 45 --volume-z-step-mm 0.5
 ```
 
 | 容量方式 | 内容 |
@@ -272,14 +365,30 @@ python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode 
 
 モジュール単体の詳細ヘルプは次のコマンドで表示します。
 
+**Windows（PowerShell）**
+
+```powershell
+py pottery_radial_sections.py --help
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python pottery_radial_sections.py --help
+python3 pottery_radial_sections.py --help
 ```
 
 単体実行も可能ですが、`--unit` は必須で `auto` は使えません。metadataによる自動解決には上記の `MorphPot.py sections` を使ってください。
 
+**Windows（PowerShell）**
+
+```powershell
+py pottery_radial_sections.py "C:/path/to/pot001_rev.ply" --unit m --angle-step 30
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python pottery_radial_sections.py "/path/to/pot001_rev.ply" --unit m --angle-step 30
+python3 pottery_radial_sections.py "/path/to/pot001_rev.ply" --unit m --angle-step 30
 ```
 
 <a id="rim-midline"></a>
@@ -308,14 +417,30 @@ v0.9.0では、口唇の最高点を中央線の始点にしません。最高�
 
 **バッファーを3mmに指定：**
 
+**Windows（PowerShell）**
+
+```powershell
+py MorphPot.py sections "C:/path/to/pot001_rev.ply" --unit auto --volume-mode none --rim-buffer-mm 3
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode none --rim-buffer-mm 3
+python3 MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode none --rim-buffer-mm 3
 ```
 
 **変化点がない直立口縁などで、口唇から15mmの弧長を手動指定：**
 
+**Windows（PowerShell）**
+
+```powershell
+py MorphPot.py sections "C:/path/to/pot001_rev.ply" --unit auto --volume-mode none --rim-end-mm 15
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode none --rim-end-mm 15
+python3 MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --volume-mode none --rim-end-mm 15
 ```
 
 変化点が見つからない場合や、バッファー分の線が足りない場合は、胴部へ自動延長せずその半断面を除外します。`--rim-end-mm` は口唇からの弧長であり、垂直深さではありません。設定すると自動の変化点・バッファー指定に代わります。
@@ -413,8 +538,16 @@ inliersは、中央線座標と両面距離の対応位置ごとの中央値か�
 
 これは相関する一個体の断面群に対する探索的な判定で、全ての局所二峰性を検出する検定ではありません。第一主成分以外の変異、三群以上、片側だけにある変異は別途検討対象です。判定条件は今後の実資料による校正が必要です。A/Bをオリジナル／復元に対応付けません。Gaussian mixtureとBICのモデル比較の参考：[scikit-learn公式例](https://scikit-learn.org/stable/auto_examples/mixture/plot_gmm_selection.html)。追加のscikit-learn依存は導入していません。
 
+**Windows（PowerShell）**
+
+```powershell
+py MorphPot.py sections "C:/path/to/pot001_rev.ply" --unit auto --angle-step 5 --volume-mode none
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --angle-step 5 --volume-mode none
+python3 MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --angle-step 5 --volume-mode none
 ```
 
 この段階の標準断面は口縁部の2Dモデルです。個体間Procrustes解析、標準3D回転メッシュ、表面セグメンテーション・アノテーションは未実装です。次段階ではfragment boundaryの拡張と表面ラベルから、取得断面をオリジナル・復元等で分けて再集約します。
@@ -463,15 +596,30 @@ python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --angle-step 5
 
 #### CLIモードと検出条件
 
+**Windows（PowerShell）**
+
+```powershell
+# メッシュの断面群から中立的な方針を推定
+py MorphPot.py sections "C:/path/to/pot001_rev.ply" --unit auto --rim-end-mode auto --volume-mode none
+# 半径方向の停滞・反転を終端とする
+py MorphPot.py sections "C:/path/to/pot001_rev.ply" --unit auto --rim-end-mode radial_turn --volume-mode none
+# 斜めの器壁から水平部への移行を終端とする
+py MorphPot.py sections "C:/path/to/pot001_rev.ply" --unit auto --rim-end-mode horizontal_transition --volume-mode none
+# 新始点からの比較弧長で指定
+py MorphPot.py sections "C:/path/to/pot001_rev.ply" --unit auto --rim-end-mode manual --rim-end-mm 15 --volume-mode none
+```
+
+**macOS（ターミナル）**
+
 ```bash
 # メッシュの断面群から中立的な方針を推定
-python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --rim-end-mode auto --volume-mode none
+python3 MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --rim-end-mode auto --volume-mode none
 # 半径方向の停滞・反転を終端とする
-python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --rim-end-mode radial_turn --volume-mode none
+python3 MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --rim-end-mode radial_turn --volume-mode none
 # 斜めの器壁から水平部への移行を終端とする
-python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --rim-end-mode horizontal_transition --volume-mode none
+python3 MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --rim-end-mode horizontal_transition --volume-mode none
 # 新始点からの比較弧長で指定
-python MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --rim-end-mode manual --rim-end-mm 15 --volume-mode none
+python3 MorphPot.py sections "/path/to/pot001_rev.ply" --unit auto --rim-end-mode manual --rim-end-mm 15 --volume-mode none
 ```
 
 GUIは不要です。候補PLYとQAを既存ビューアで確認します。`--rim-end-mm`を指定するとautoや他のモードより優先してmanualとなります。manualモードはこの弧長指定が必須です。
@@ -514,18 +662,33 @@ v0.10.0までは標準中央線の法線を各個別中央点に置いて距離�
 
 公開版に向けた検証専用CLI `pottery_rim_validation.py` を追加しました。RadialSections本体はv0.10.1のままです。入力は既に生成した断面出力フォルダ、または分割数検証用のメッシュです。元のPLYへ姿勢Transformを再適用しません。
 
+**Windows（PowerShell）**
+
+```powershell
+# 既存出力を始点から1mm間隔で検証（similarity/affineの両方）
+py pottery_rim_validation.py validate sample_RadialSections_5deg --output-dir validation --interval-mm 1
+
+# 角度間隔だけを変えて再抽出し、最後の5度を比較基準にする
+py pottery_rim_validation.py sweep sample.ply --output-dir division_validation --steps 30 15 10 5 --interval-mm 1 -- --unit m --z-step-mm 5 --rim-end-mode radial_turn
+
+# 既存の複数条件を比較（最後のフォルダが基準）
+py pottery_rim_validation.py compare run_30deg run_15deg run_5deg --output-dir comparison --interval-mm 1 --mode similarity
+```
+
+**macOS（ターミナル）**
+
 ```bash
 # 既存出力を始点から1mm間隔で検証（similarity/affineの両方）
-python pottery_rim_validation.py validate sample_RadialSections_5deg \
+python3 pottery_rim_validation.py validate sample_RadialSections_5deg \
   --output-dir validation --interval-mm 1
 
 # 角度間隔だけを変えて再抽出し、最後の5度を比較基準にする
-python pottery_rim_validation.py sweep sample.ply \
+python3 pottery_rim_validation.py sweep sample.ply \
   --output-dir division_validation --steps 30 15 10 5 --interval-mm 1 \
   -- --unit m --z-step-mm 5 --rim-end-mode radial_turn
 
 # 既存の複数条件を比較（最後のフォルダが基準）
-python pottery_rim_validation.py compare run_30deg run_15deg run_5deg \
+python3 pottery_rim_validation.py compare run_30deg run_15deg run_5deg \
   --output-dir comparison --interval-mm 1 --mode similarity
 ```
 
@@ -555,13 +718,25 @@ python pottery_rim_validation.py compare run_30deg run_15deg run_5deg \
 
 `validate` は各方式・選択群のフォルダに `profile_all_overlay.ply` と `profile_all_overlay.png` を追加します。選択された全半断面の元内外面（灰）と標準モデルの内外面（赤）を同じ座標に重ねます。個別の `profile_NNN_overlay_xy.ply` / `.png` も補足資料用に引き続き生成します。`--no-plots` を指定した場合だけPNGを省きます。
 
+**Windows（PowerShell）**
+
+```powershell
+# 180平面（0〜179°など）を試行した1°間隔の解析出力を指定
+py pottery_rim_validation.py phases 0015Jinmen_small_RadialSections_1deg --output-dir phase_validation --steps 5 10 15 --interval-mm 5
+
+# どの間隔でも開始角度を0〜4°の5セットだけに限定する場合
+py pottery_rim_validation.py phases 0015Jinmen_small_RadialSections_1deg --output-dir phase_validation_5starts --steps 5 10 15 --phases 0 1 2 3 4 --interval-mm 5
+```
+
+**macOS（ターミナル）**
+
 ```bash
 # 180平面（0〜179°など）を試行した1°間隔の解析出力を指定
-python pottery_rim_validation.py phases 0015Jinmen_small_RadialSections_1deg \
+python3 pottery_rim_validation.py phases 0015Jinmen_small_RadialSections_1deg \
   --output-dir phase_validation --steps 5 10 15 --interval-mm 5
 
 # どの間隔でも開始角度を0〜4°の5セットだけに限定する場合
-python pottery_rim_validation.py phases 0015Jinmen_small_RadialSections_1deg \
+python3 pottery_rim_validation.py phases 0015Jinmen_small_RadialSections_1deg \
   --output-dir phase_validation_5starts --steps 5 10 15 --phases 0 1 2 3 4 \
   --interval-mm 5
 ```
@@ -593,11 +768,22 @@ python pottery_rim_validation.py phases 0015Jinmen_small_RadialSections_1deg \
 
 **画像だけ再出力**する場合、モデル再計算は不要です。既存のphase_validation内の比較CSVを使います。
 
-```bash
-python pottery_rim_interval_plot.py phase_validation --steps 5 10 15
+**Windows（PowerShell）**
+
+```powershell
+py pottery_rim_interval_plot.py phase_validation --steps 5 10 15
 
 # 出力先を指定、similarityだけを生成
-python pottery_rim_interval_plot.py phase_validation \
+py pottery_rim_interval_plot.py phase_validation --output-dir interval_images --mode similarity --steps 5 10 15
+```
+
+**macOS（ターミナル）**
+
+```bash
+python3 pottery_rim_interval_plot.py phase_validation --steps 5 10 15
+
+# 出力先を指定、similarityだけを生成
+python3 pottery_rim_interval_plot.py phase_validation \
   --output-dir interval_images --mode similarity --steps 5 10 15
 ```
 
@@ -612,15 +798,29 @@ python pottery_rim_interval_plot.py phase_validation \
 
 標準中央線の曲がり方そのものを比較するPNG・測点CSV・集計CSV・条件JSONを追加しました。phasesの画像生成時に `curvature_turning/` へ自動出力します。既存結果に追加分だけを生成する場合は、独立スクリプトを実行します。モデルの再計算・メッシュ抽出は行いません。
 
-```bash
-python pottery_rim_curvature_plot.py phase_validation --steps 5 10 15
+**Windows（PowerShell）**
+
+```powershell
+py pottery_rim_curvature_plot.py phase_validation --steps 5 10 15
 
 # 全間隔を開始角度0〜4°の共通5セットに揃える場合
-python pottery_rim_curvature_plot.py phase_validation \
+py pottery_rim_curvature_plot.py phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --output-dir curvature_common5
+
+# 1°基準の保存場所が変わった場合は明示的に指定
+py pottery_rim_curvature_plot.py phase_validation --reference-dir C:/path/to/0015Jinmen_small_RadialSections_1deg
+```
+
+**macOS（ターミナル）**
+
+```bash
+python3 pottery_rim_curvature_plot.py phase_validation --steps 5 10 15
+
+# 全間隔を開始角度0〜4°の共通5セットに揃える場合
+python3 pottery_rim_curvature_plot.py phase_validation \
   --steps 5 10 15 --phases 0 1 2 3 4 --output-dir curvature_common5
 
 # 1°基準の保存場所が変わった場合は明示的に指定
-python pottery_rim_curvature_plot.py phase_validation \
+python3 pottery_rim_curvature_plot.py phase_validation \
   --reference-dir /path/to/0015Jinmen_small_RadialSections_1deg
 ```
 
@@ -659,16 +859,32 @@ python pottery_rim_curvature_plot.py phase_validation \
 
 既存出力の場所は、現在の作業ディレクトリからの相対パスまたは絶対パスで指定します。入力は `rim_standardization/rim_qa.json` を持つ抽出出力フォルダ、またはその `rim_standardization` 自体です。フォルダ名を推測せず、実在する場所を指定してください。
 
-```bash
+**Windows（PowerShell）**
+
+```powershell
 # 保存済み出力を検証（実際の保存先を指定）
-python pottery_rim_validation.py validate "/path/to/0015Jinmen_small_RadialSections_5deg" --output-dir validation --interval-mm 5
+py pottery_rim_validation.py validate "C:/path/to/0015Jinmen_small_RadialSections_5deg" --output-dir validation --interval-mm 5
 
 # 各間隔で開始位置0〜4°の共通5セットを作成
-python pottery_rim_validation.py phases "/path/to/0015Jinmen_small_RadialSections_1deg" --output-dir phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --interval-mm 5
+py pottery_rim_validation.py phases "C:/path/to/0015Jinmen_small_RadialSections_1deg" --output-dir phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --interval-mm 5
 
 # 既存モデルから2mm／4mm窓の曲率・旋回角を追加生成
-python pottery_rim_curvature_plot.py phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --smooth-mm 2 --output-dir curvature_common5_smooth2
-python pottery_rim_curvature_plot.py phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --smooth-mm 4 --output-dir curvature_common5_smooth4
+py pottery_rim_curvature_plot.py phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --smooth-mm 2 --output-dir curvature_common5_smooth2
+py pottery_rim_curvature_plot.py phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --smooth-mm 4 --output-dir curvature_common5_smooth4
+```
+
+**macOS（ターミナル）**
+
+```bash
+# 保存済み出力を検証（実際の保存先を指定）
+python3 pottery_rim_validation.py validate "/path/to/0015Jinmen_small_RadialSections_5deg" --output-dir validation --interval-mm 5
+
+# 各間隔で開始位置0〜4°の共通5セットを作成
+python3 pottery_rim_validation.py phases "/path/to/0015Jinmen_small_RadialSections_1deg" --output-dir phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --interval-mm 5
+
+# 既存モデルから2mm／4mm窓の曲率・旋回角を追加生成
+python3 pottery_rim_curvature_plot.py phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --smooth-mm 2 --output-dir curvature_common5_smooth2
+python3 pottery_rim_curvature_plot.py phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --smooth-mm 4 --output-dir curvature_common5_smooth4
 ```
 
 **ここまでの結果**：既知厚4mmの合成壁では、旧共通法線測定の4.6188mmを個別法線測定で4.0000mmへ修正できました。提供された実データCSVのモデル厚4mmに最も近い対応点（モデル4.0268mm）では、64半断面の平均4.0300mm、最小2.5136mm、最大4.9239mm、母標準偏差0.4072mmでした。72半断面の集計ではなく、同じ対応点における変換後の法線器厚です。モデル厚は内外距離の中央値を別々に集約するため、器厚の平均とは一致する必要がありません。
@@ -698,15 +914,30 @@ python pottery_rim_curvature_plot.py phase_validation --steps 5 10 15 --phases 0
 
 ### 実行例
 
-```bash
+**Windows（PowerShell）**
+
+```powershell
 # 従来のrequirementsだけで実行（新しい依存パッケージは不要）
-python pottery_whole_model.py "0015Jinmen_small.ply" --unit m --output-dir whole_model --angle-step 5 --profile-spacing-mm 0.5
+py pottery_whole_model.py "0015Jinmen_small.ply" --unit m --output-dir whole_model --angle-step 5 --profile-spacing-mm 0.5
 
 # 保存済みの解析軸中心を明示する場合（数値の単位は常にmm）
-python pottery_whole_model.py "0015Jinmen_small.ply" --unit m --output-dir whole_model_fixed_axis --axis-xy-mm 138.148217 -107.444779
+py pottery_whole_model.py "0015Jinmen_small.ply" --unit m --output-dir whole_model_fixed_axis --axis-xy-mm 138.148217 -107.444779
 
 # 対応点の間隔を細かくした比較
-python pottery_whole_model.py "0015Jinmen_small.ply" --unit m --output-dir whole_model_fine --profile-spacing-mm 0.25
+py pottery_whole_model.py "0015Jinmen_small.ply" --unit m --output-dir whole_model_fine --profile-spacing-mm 0.25
+```
+
+**macOS（ターミナル）**
+
+```bash
+# 従来のrequirementsだけで実行（新しい依存パッケージは不要）
+python3 pottery_whole_model.py "0015Jinmen_small.ply" --unit m --output-dir whole_model --angle-step 5 --profile-spacing-mm 0.5
+
+# 保存済みの解析軸中心を明示する場合（数値の単位は常にmm）
+python3 pottery_whole_model.py "0015Jinmen_small.ply" --unit m --output-dir whole_model_fixed_axis --axis-xy-mm 138.148217 -107.444779
+
+# 対応点の間隔を細かくした比較
+python3 pottery_whole_model.py "0015Jinmen_small.ply" --unit m --output-dir whole_model_fine --profile-spacing-mm 0.25
 ```
 
 `--unit auto|mm|cm|m`（既定auto）、`--angle-step`（既定5°、180°を整数分割）、`--start-angle`、`--axis-surface inner|outer`、`--axis-sections`（既定40）、`--axis-xy-mm X Y`、`--revolution-sections`（既定180）、`--max-memory-mb`（既定1024）、`--require-watertight`、`--no-plots` に対応します。プロフィール標本間隔は各輪郭の中央値弧長から対応点数を決める目安で、各断面の実際の点間隔は異なります。voxelピッチではありません。出力先は空フォルダを指定します。
@@ -736,15 +967,30 @@ python pottery_whole_model.py "0015Jinmen_small.ply" --unit m --output-dir whole
 
 `pottery_whole_validation.py` はこの1ファイルだけで使える検証CLIです。MorphPotパッケージをimportせず、標準ライブラリ・NumPy・SciPyで保存済み出力を検証します。未使用方位のメッシュ抽出にはtrimesh・networkx、PNG生成にはMatplotlibが必要です。既存requirementsで実行できます。全体モデルの生成CLI、口縁部検証CLIとは別立てです。
 
-```bash
+**Windows（PowerShell）**
+
+```powershell
 # 保存済み全体モデルだけで中央値・平均・トリム平均を比較
-python pottery_whole_validation.py whole_model --output-dir whole_validation --interval-mm 1
+py pottery_whole_validation.py whole_model --output-dir whole_validation --interval-mm 1
 
 # 同じ元PLYから未使用方位を抽出（5°モデルなら既定は2.5°の開始オフセット）
-python pottery_whole_validation.py whole_model --output-dir whole_validation_holdout --input-mesh "0015Jinmen_small.ply" --holdout-offset-deg 2.5 --interval-mm 1
+py pottery_whole_validation.py whole_model --output-dir whole_validation_holdout --input-mesh "0015Jinmen_small.ply" --holdout-offset-deg 2.5 --interval-mm 1
 
 # 集約方式・トリム率・検証密度を指定
-python pottery_whole_validation.py whole_model --output-dir whole_validation_trim --methods median trimmed_mean --trim-fraction 0.1 --interval-mm 0.5 --no-plots
+py pottery_whole_validation.py whole_model --output-dir whole_validation_trim --methods median trimmed_mean --trim-fraction 0.1 --interval-mm 0.5 --no-plots
+```
+
+**macOS（ターミナル）**
+
+```bash
+# 保存済み全体モデルだけで中央値・平均・トリム平均を比較
+python3 pottery_whole_validation.py whole_model --output-dir whole_validation --interval-mm 1
+
+# 同じ元PLYから未使用方位を抽出（5°モデルなら既定は2.5°の開始オフセット）
+python3 pottery_whole_validation.py whole_model --output-dir whole_validation_holdout --input-mesh "0015Jinmen_small.ply" --holdout-offset-deg 2.5 --interval-mm 1
+
+# 集約方式・トリム率・検証密度を指定
+python3 pottery_whole_validation.py whole_model --output-dir whole_validation_trim --methods median trimmed_mean --trim-fraction 0.1 --interval-mm 0.5 --no-plots
 ```
 
 入力は `whole_model.json` と `profile_distribution.npz` を持つWholeModel出力フォルダです。元PLYを指定した場合、SHA-256が生成時と一致することを確認してmetadataの単位・解析軸を使います。未使用方位は元の試行グリッドと重複すると拒否します。既定の方位間隔は生成時と同じ、開始オフセットはその半分です。`--holdout-angle-step` で変更できます。閉じた単一の半断面のみ採用し、有効率80%未満は停止します。元メッシュや元モデルを変更せず、出力は別の空フォルダを指定します。
@@ -773,13 +1019,24 @@ training評価は保存済みの補間輪郭、holdout評価は元メッシュ�
 
 `pottery_whole_dimension_validation.py` を追加しました。同じフォルダの `pottery_whole_validation.py` を共通処理として使用します。この2ファイルと既存requirementsで動作し、morphpotパッケージは不要です。入力はWholeModelの出力フォルダです。元モデル・メッシュは変更しません。
 
+**Windows（PowerShell）**
+
+```powershell
+py pottery_whole_dimension_validation.py "0015Jinmen_whole_model_v0.1.0/whole_model" --output-dir whole_dimension_validation --interval-mm 1
+
+# 未使用角度も検証（元PLYのSHA-256を確認、単位と解析軸を継承）
+py pottery_whole_dimension_validation.py "0015Jinmen_whole_model_v0.1.0/whole_model" --output-dir whole_dimension_validation_holdout --input-mesh "C:/path/to/0015Jinmen_small.ply" --holdout-offset-deg 2.5 --interval-mm 1
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python pottery_whole_dimension_validation.py \
+python3 pottery_whole_dimension_validation.py \
   "0015Jinmen_whole_model_v0.1.0/whole_model" \
   --output-dir whole_dimension_validation --interval-mm 1
 
 # 未使用角度も検証（元PLYのSHA-256を確認、単位と解析軸を継承）
-python pottery_whole_dimension_validation.py \
+python3 pottery_whole_dimension_validation.py \
   "0015Jinmen_whole_model_v0.1.0/whole_model" \
   --output-dir whole_dimension_validation_holdout \
   --input-mesh "/path/to/0015Jinmen_small.ply" \
@@ -820,14 +1077,25 @@ python pottery_whole_dimension_validation.py \
 
 `pottery_whole_thickness_diagnostics.py` は保存済みWholeModelから追加分だけを実行するCLIです。モデルを再生成せず、3集約モデルと各実測半断面で測定線を可視化します。既存の `morphpot.rim_standardization.make_midline` を使用するため、MorphPotリポジトリ全体と既存requirementsが必要です。
 
+**Windows（PowerShell）**
+
+```powershell
+py pottery_whole_thickness_diagnostics.py "0015Jinmen_whole_model_v0.1.0/whole_model" --output-dir whole_thickness_diagnostics --rim-length-mm 40 --pair-window-mm 8 --interval-mm 1
+
+# 未使用角度も追加
+py pottery_whole_thickness_diagnostics.py "0015Jinmen_whole_model_v0.1.0/whole_model" --output-dir whole_thickness_diagnostics_holdout --input-mesh "C:/path/to/0015Jinmen_small.ply" --holdout-offset-deg 2.5 --rim-length-mm 40 --pair-window-mm 8
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python pottery_whole_thickness_diagnostics.py \
+python3 pottery_whole_thickness_diagnostics.py \
   "0015Jinmen_whole_model_v0.1.0/whole_model" \
   --output-dir whole_thickness_diagnostics \
   --rim-length-mm 40 --pair-window-mm 8 --interval-mm 1
 
 # 未使用角度も追加
-python pottery_whole_thickness_diagnostics.py \
+python3 pottery_whole_thickness_diagnostics.py \
   "0015Jinmen_whole_model_v0.1.0/whole_model" \
   --output-dir whole_thickness_diagnostics_holdout \
   --input-mesh "/path/to/0015Jinmen_small.ply" \
@@ -868,9 +1136,18 @@ PLYはX=半径、Y=入力高さ、Z=0で入力単位。CSV・PNGはmmです。PN
 
 `pottery_whole_shape_exploration.py`は、正規化済みPLYから全長弧長対応、頸部で分割する区間別対応、区間別対応＋底部固定の限定変形の3方式を生成・比較する開発検証用CLIです。現在のカテゴリ`necked_jar`は頸部のくびれを持つ器形の暫定的な幾何条件であり、考古学的な器種・型式の自動同定ではありません。
 
+**Windows（PowerShell）**
+
+```powershell
+py -m pip install -r requirements.txt
+py pottery_whole_shape_exploration.py "C:/path/to/normalized.ply" --category necked_jar --output-dir exploration/individual_01
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python -m pip install -r requirements.txt
-python pottery_whole_shape_exploration.py "/path/to/normalized.ply" --category necked_jar --output-dir exploration/individual_01
+python3 -m pip install -r requirements.txt
+python3 pottery_whole_shape_exploration.py "/path/to/normalized.ply" --category necked_jar --output-dir exploration/individual_01
 ```
 
 入力PLYの付属metadataから単位を読み取り、姿勢Transformは再適用しません。metadataがない場合は`--unit m`等を明示してください。出力先は新規または空ディレクトリを指定します。条件に不適合・未確定なら診断を保存して非ゼロ終了し、モデル生成を中止します。
@@ -885,20 +1162,40 @@ python pottery_whole_shape_exploration.py "/path/to/normalized.ply" --category n
 
 生成済み結果から部位別比較と器厚診断を追加する場合：
 
+**Windows（PowerShell）**
+
+```powershell
+py summarize_whole_shape_exploration.py exploration/individual_01 exploration/individual_02 --output-dir exploration/research
+py plot_whole_thickness_diagnostics.py exploration/individual_01 exploration/individual_02
+```
+
+**macOS（ターミナル）**
+
 ```bash
-python summarize_whole_shape_exploration.py exploration/individual_01 exploration/individual_02 --output-dir exploration/research
-python plot_whole_thickness_diagnostics.py exploration/individual_01 exploration/individual_02
+python3 summarize_whole_shape_exploration.py exploration/individual_01 exploration/individual_02 --output-dir exploration/research
+python3 plot_whole_thickness_diagnostics.py exploration/individual_01 exploration/individual_02
 ```
 
 全体モデル探索の検証出力には、考古学者向けの説明図を追加しました。`validation/registration_comparison/RegistrationComparison.md`に、特徴点で位置合わせしない原位置断面（左）と、保存済みの頸部・口唇の限定変形を適用した断面（右）を同じ縮尺で掲載します。全体図・頸部口縁拡大図・統計グラフをtrainingとholdoutに分けて出力します。
 
 保存済みの探索結果から追加分だけを生成できます（メッシュの再解析は不要）：
 
-```bash
-python plot_whole_registration_comparison.py exploration/individual_01 exploration/individual_02
+**Windows（PowerShell）**
+
+```powershell
+py plot_whole_registration_comparison.py exploration/individual_01 exploration/individual_02
 
 # 出力を別フォルダへまとめる場合：その下に個体名のサブフォルダを作成
-python plot_whole_registration_comparison.py exploration/individual_01 exploration/individual_02 \
+py plot_whole_registration_comparison.py exploration/individual_01 exploration/individual_02 --output-dir registration_figures --interval-mm 1 --height-bin-mm 5
+```
+
+**macOS（ターミナル）**
+
+```bash
+python3 plot_whole_registration_comparison.py exploration/individual_01 exploration/individual_02
+
+# 出力を別フォルダへまとめる場合：その下に個体名のサブフォルダを作成
+python3 plot_whole_registration_comparison.py exploration/individual_01 exploration/individual_02 \
   --output-dir registration_figures --interval-mm 1 --height-bin-mm 5
 ```
 
