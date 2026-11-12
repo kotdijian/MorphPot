@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PotteryVolumeCalculator
-Version 1.3.2
+Version 1.4.0
 
 OBJ / PLY の土器メッシュから、内面を明示的に抽出せず、
 「液体が最初に外へ溢れ出す直前までの最大内容量」を voxel 法で推定する。
@@ -52,7 +52,7 @@ from contextlib import redirect_stdout
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 
-__version__ = "1.3.2"
+__version__ = "1.4.0"
 
 
 # ----------------------------------------------------------------------
@@ -2333,6 +2333,7 @@ def estimate_volume(
         "preflight_scale_resource": preflight_report,
         "output_directory": str(layout["base"]),
         "run_directory": str(layout["run"]),
+        "mesh_z_min_mm": zmin_mm,
         "mesh_extents_native": [
             native_length(float(v), unit) for v in extents_mm
         ],
@@ -2751,8 +2752,9 @@ def run_validation_suite(
 # CLI
 # ----------------------------------------------------------------------
 
-def main():
+def main(argv=None, *, normalized_ply=False):
     parser = argparse.ArgumentParser(
+        prog="MorphPot.py volume" if normalized_ply else None,
         description=(
             "deterministic QA + optional PyMeshLab cross-check + voxel spill-level法により、"
             "土器が液体を保持できる最大内容積を推定"
@@ -2776,12 +2778,17 @@ def main():
             "通常は指定不要"
         ),
     )
-    parser.add_argument("input", type=Path, nargs="?", help="入力 OBJ または PLY")
+    parser.add_argument("input", type=Path, nargs="?", help="姿勢正規化済み PLY" if normalized_ply else "入力 OBJ または PLY")
     parser.add_argument(
         "--unit",
-        choices=["mm", "cm", "m"],
-        default="mm",
-        help="入力メッシュの座標単位。既定値 mm",
+        choices=["auto", "mm", "cm", "m"],
+        default=None,
+        help=(
+            "PLYの単位は既定でメタデータから取得。メタデータがなければ明示指定"
+            if normalized_ply else
+            "入力座標の単位。PLYにメタデータがない場合とOBJの既定値はmm。"
+            "PLYで --unit auto を指定するとメタデータ必須"
+        ),
     )
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument(
@@ -2800,6 +2807,18 @@ def main():
             "multi-pitch validation mode: 2.0 / 1.0 / 0.5 mmを"
             "独立した全工程として一括実行し、収束summaryを作成"
         ),
+    )
+    parser.add_argument(
+        "--compare-poses", nargs="+", type=Path, metavar="AOM_EXPORT",
+        help="同一資料の姿勢別 AOM 出力フォルダを比較。--pitch で共通ピッチを指定",
+    )
+    parser.add_argument(
+        "--pose-baseline", choices=("rim", "base", "slice"),
+        help="容量差の基準。省略時は正常に計算できた Rim / Base / 採用 Slice の順",
+    )
+    parser.add_argument(
+        "--include-reference-slice", action="store_true",
+        help="参考と判定された Slice の試算を含める",
     )
     parser.add_argument(
         "--output-dir",
@@ -2852,20 +2871,63 @@ def main():
         help="surface voxel全体とspill付近スラブを常に出力",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.diagnose_env:
         print_environment_diagnostics()
         return
 
-    if args.input is None:
-        parser.error("input OBJ/PLY が必要です（--diagnose-env の場合を除く）")
+    if args.compare_poses:
+        if args.input is not None or args.validate:
+            parser.error("--compare-poses は入力ファイルの位置引数や --validate と併用できません")
+    else:
+        if args.pose_baseline or args.include_reference_slice:
+            parser.error("姿勢比較オプションには --compare-poses が必要です")
+        if args.input is None:
+            parser.error("input OBJ/PLY または --compare-poses が必要です")
+
+    unit = None if args.unit == "auto" else args.unit
+    if args.input is not None:
+        is_ply = args.input.suffix.lower() == ".ply"
+        if normalized_ply and not is_ply:
+            parser.error("The MorphPot entry point accepts normalized PLY meshes.")
+        if not is_ply and args.unit == "auto":
+            parser.error("--unit auto requires a normalized PLY.")
+        if is_ply and (
+            normalized_ply or args.unit == "auto" or args.input.with_suffix(".asset.json").is_file()
+            or (unit is None and (args.input.parent / "transform.json").is_file())
+        ):
+            from morphpot.asset_metadata import resolve_units
+
+            try:
+                unit, _, _ = resolve_units(args.input, unit)
+            except (ValueError, OSError) as exc:
+                parser.error(str(exc))
 
     try:
-        if args.validate:
+        if args.compare_poses:
+            from pose_comparison import run_pose_comparison
+
+            run_pose_comparison(
+                folders=args.compare_poses,
+                output_dir=args.output_dir,
+                pitch=1.0 if args.pitch is None else args.pitch,
+                unit=unit,
+                baseline=args.pose_baseline,
+                include_reference=args.include_reference_slice,
+                estimate_volume=estimate_volume,
+                pad=args.pad,
+                min_cavity_area_mm2=args.min_cavity_area,
+                seed_persistence=args.seed_persist,
+                close_iterations=args.close_iters,
+                debug_voxels=args.debug_voxels,
+                boundary_sample_mm=args.boundary_sample_mm,
+                require_pymeshlab=args.require_pymeshlab,
+            )
+        elif args.validate:
             run_validation_suite(
                 input_path=args.input,
-                unit=args.unit,
+                unit=unit or "mm",
                 pad=args.pad,
                 min_cavity_area_mm2=args.min_cavity_area,
                 seed_persistence=args.seed_persist,
@@ -2881,7 +2943,7 @@ def main():
             estimate_volume(
                 input_path=args.input,
                 pitch=pitch,
-                unit=args.unit,
+                unit=unit or "mm",
                 pad=args.pad,
                 min_cavity_area_mm2=args.min_cavity_area,
                 seed_persistence=args.seed_persist,
@@ -2900,4 +2962,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

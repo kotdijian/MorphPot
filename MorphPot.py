@@ -16,6 +16,12 @@ COMMANDS = {
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["volume"]:
+        from vessel_voxel_volume import main as volume_main
+        volume_main(argv[1:], normalized_ply=True)
+        return 0
+
     parser = argparse.ArgumentParser(description="MorphPot: analysis of normalized pottery PLY meshes")
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("command", choices=COMMANDS)

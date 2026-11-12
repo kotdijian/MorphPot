@@ -16,6 +16,9 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 
 ## 目次
 
+- [容量計算：ボクセル・断面・実測図](#capacity)
+- [AOM姿勢別の容量比較](docs/capacity/README.md#aom-pose-comparison)
+
 - [器形条件に基づく全体モデル生成法の探索](#whole-shape-exploration)
 
 - [口縁付近の器厚交点・対応の診断](#whole-thickness-diagnostics)
@@ -56,6 +59,19 @@ Surface Enhancement Labは共通手法の継承用としてexperimental/に収�
 - [曲率・旋回角の追加検証](https://github.com/kotdijian/MorphPot/blob/main/README.md#curvature-turning)
 
 詳細な検証方法・結果は [ValidationReport.md](ValidationReport.md) を参照してください。
+
+<a id="capacity"></a>
+
+## 容量計算
+
+ArchMorphの土器容量計算はMorphPotで保守します。旧PotteryVolumeCalculatorのvoxel v1.4.0を統合し、単一メッシュ・複数ピッチの検証に加え、同じ資料のAOM Rim／Base／Slice出力を比較できます。
+
+```bash
+python MorphPot.py volume "/path/to/pot_rev.ply" --unit auto --pitch 1
+python MorphPot.py volume --compare-poses "/path/to/rim_export" "/path/to/base_export" --output-dir pot_pose_comparison
+```
+
+単位・出力・移管前の検証記録は[容量計算ガイド](docs/capacity/README.md)（[English](docs/capacity/README_EN.md)）を参照してください。断面法は `MorphPot.py sections`、2D実測図は `python pottery_drawing_capacity.py` を使います。
 
 <a id="surface-trace"></a>
 
@@ -578,7 +594,7 @@ python pottery_rim_curvature_plot.py phase_validation \
 
 # 1°基準の保存場所が変わった場合は明示的に指定
 python pottery_rim_curvature_plot.py phase_validation \
-  --reference-dir ../PotteryVolumeCalculator/0015Jinmen_small_RadialSections_1deg
+  --reference-dir /path/to/0015Jinmen_small_RadialSections_1deg
 ```
 
 必要なのは既存phase_validationの `phase_experiment.json`、各セットの標準断面CSV（mid_x_mm・mid_y_mm）、元の1°出力の標準断面CSVです。参照先はmanifestから取得し、移動・別環境では `--reference-dir` で指定します。`pottery_rim_curvature_plot.py` はPython・NumPy・SciPy・Matplotlibだけで動作する単独ファイルです。
@@ -617,11 +633,11 @@ python pottery_rim_curvature_plot.py phase_validation \
 既存出力の場所は、現在の作業ディレクトリからの相対パスまたは絶対パスで指定します。入力は `rim_standardization/rim_qa.json` を持つ抽出出力フォルダ、またはその `rim_standardization` 自体です。フォルダ名を推測せず、実在する場所を指定してください。
 
 ```bash
-# MorphPotから、隣のPotteryVolumeCalculatorにある保存済み出力を検証
-python pottery_rim_validation.py validate "../PotteryVolumeCalculator/0015Jinmen_small_RadialSections_5deg" --output-dir validation --interval-mm 5
+# 保存済み出力を検証（実際の保存先を指定）
+python pottery_rim_validation.py validate "/path/to/0015Jinmen_small_RadialSections_5deg" --output-dir validation --interval-mm 5
 
 # 各間隔で開始位置0〜4°の共通5セットを作成
-python pottery_rim_validation.py phases "../PotteryVolumeCalculator/0015Jinmen_small_RadialSections_1deg" --output-dir phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --interval-mm 5
+python pottery_rim_validation.py phases "/path/to/0015Jinmen_small_RadialSections_1deg" --output-dir phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --interval-mm 5
 
 # 既存モデルから2mm／4mm窓の曲率・旋回角を追加生成
 python pottery_rim_curvature_plot.py phase_validation --steps 5 10 15 --phases 0 1 2 3 4 --smooth-mm 2 --output-dir curvature_common5_smooth2
@@ -739,7 +755,7 @@ python pottery_whole_dimension_validation.py \
 python pottery_whole_dimension_validation.py \
   "0015Jinmen_whole_model_v0.1.0/whole_model" \
   --output-dir whole_dimension_validation_holdout \
-  --input-mesh "../PotteryVolumeCalculator/0015Jinmen_small.ply" \
+  --input-mesh "/path/to/0015Jinmen_small.ply" \
   --holdout-offset-deg 2.5 --interval-mm 1
 ```
 
@@ -787,7 +803,7 @@ python pottery_whole_thickness_diagnostics.py \
 python pottery_whole_thickness_diagnostics.py \
   "0015Jinmen_whole_model_v0.1.0/whole_model" \
   --output-dir whole_thickness_diagnostics_holdout \
-  --input-mesh "../PotteryVolumeCalculator/0015Jinmen_small.ply" \
+  --input-mesh "/path/to/0015Jinmen_small.ply" \
   --holdout-offset-deg 2.5 --rim-length-mm 40 --pair-window-mm 8
 ```
 

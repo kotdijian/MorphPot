@@ -1,6 +1,6 @@
 # MorphPot DevelopmentReport
 
-更新日：2026-10-06 JST  
+更新日：2026-11-12 JST
 状態：MorphPot 0.1.0-dev1 / RadialSections 0.10.1 / RimValidation 0.2.2-dev — 口縁モデルの器厚・位相・間隔・曲率検証
 
 ## 1. 開発方針
@@ -8,7 +8,18 @@
 
 座標軸は全ツール共通の固定規約にせず、処理ごとに定義する。現行の継承アルゴリズムはZを器高／器軸としている。任意軸や投影方向を指定するadapterの共通化は今後行う。実測モデル、復元器形、ガイド、fit後配置は区別する。
 
-## 2. 今回の移管とマージ
+## 2. 移管とマージ
+
+### PotteryVolumeCalculatorの保守先統合（2026-11-12 JST）
+
+- 旧リポジトリの `93fbdbad24f22c38423d9e1b4780622b2ef8ccab` からvoxel容量 v1.4.0とAOM姿勢比較を取り込み、`MorphPot.py volume` と従来の独立CLIで同じ実装を使う。
+- 通常の正規化PLYは既存の単位解決を利用し、姿勢比較はAOMのmanifest・Transform・出力PLYを照合する。姿勢行列はPLYへ再適用しない。
+- MorphPot側のRadialSections v0.10.1、DrawingCapacity v0.6.0、共有の数値積分と既存の検証を維持した。表面痕跡・多尺度特徴・破片境界もMorphPotに集約する。
+- [容量ガイド](docs/capacity/README.md)に操作・方式の違い・出力・旧版検証を集約した。旧版の大容量メッシュ・図版付きPDFは旧リポジトリの固定コミットを参照する。
+
+移管時の回帰検証：テスト93件が通過。メートル単位の人工開口容器を使い、Rimと12°傾いたBaseの比較、参考Sliceの既定除外、単位・ハッシュ不一致の拒否、独立CLIとの一致を確認。公開サンプル0015 Jinmenは2 mmピッチで、旧・新v1.4.0とも5.80272 L、溢水高Z=242 mm。これは移管による数値変化がないことの確認であり、実資料のRim／Base／Slice比較の妥当性は今後検証する。
+
+### 先行する移管と開発
 - RadialSections v0.8.1：停止条件を左への進行の持続→停滞／反転へ変更。上下方向条件と中央線生成の高さ単調性要件を撤廃。口縁部局所の順序保持DTW対応で内外面中間線を生成。自動バッファーの器厚代理値は対応内外面間距離へ変更。
 - 提供された0°–180°の実断面CSVで左右2本の自動抽出・相似／アフィン標準化、および手動15mm抽出を検証。中央線停止位置は右約31.0mm・左約31.3mm。全36方向は未提供のため再検証していない。40°／160°の複数輪郭問題は今回の対象外。
 - RadialSections v0.8.0：左右半断面を右側へ揃えた口縁部中央線の抽出と、相似／制約付きアフィンによる個体内標準化を追加。比較範囲は口唇から持続的な左下→下・右下の変化点＋バッファーまで。初期バッファーは半径方向器厚2倍、固定mm／終端弧長で変更可。
@@ -30,6 +41,7 @@
 | MorphPot.py | volume / sections / surface-trace / fragment-boundaryの入口 |
 | morphpot/asset_metadata.py | 単位・メタデータ解決、対応PLYハッシュ検証。Transform行列の適用は行わない |
 | vessel_voxel_volume.py | 全体voxel化、内腔seed検証、高さ制限flood fill、first-spill直前の最大保持容量、複数pitch検証、QA |
+| pose_comparison.py | AOM姿勢別出力の整合検証、共通ピッチでの容量・溢水高・角度差の比較 |
 | pottery_radial_sections.py | 水平断面楕円fit、内外輪郭、MAD中心選択、Z平行器軸位置、放射全断面／半断面、容量4方式 |
 | morphpot/section_overlay.py | 全断面のXY重ね合わせ、左右の口唇登録、内外面中央値の閉ポリライン、採用／除外QA |
 | morphpot/rim_endpoint.py | 半径方向停滞／水平移行の終端候補、直立・複合等の中立的な形状候補、支持方位・位置ばらつき、候補CSV／点PLY |

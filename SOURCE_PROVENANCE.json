@@ -8,9 +8,9 @@
     },
     {
       "path": "DevelopmentReport.md",
-      "sha256": "90653b96acca5b26b2bbf39df565a2c1ce553d8f3f264cc15376f1e482186264",
+      "sha256": "b4d09ce7183360645da8481be8f7eb83277878e94543c836eb2871ee9ddb46bc",
       "origin": "integration work 2026-10-05",
-      "last_modified_on": "2026-10-05"
+      "last_modified_on": "2026-11-12"
     },
     {
       "path": "LICENSE",
@@ -19,19 +19,21 @@
     },
     {
       "path": "MorphPot.py",
-      "sha256": "df64506fb45b41cf845c04788cc311ff122f85ab30a2d86d39a3b1837823e49b",
-      "origin": "integration work 2026-10-05"
+      "sha256": "93d6eafe8dc84f6bbc63541e5879dc0ef563c4ccea4571cd7d3b837ce11d88fd",
+      "origin": "integration work 2026-10-05",
+      "last_modified_on": "2026-11-12"
     },
     {
       "path": "README.md",
-      "sha256": "0b83d86a230568d7434205fffa41057240c6381714bccfd5cd6f47902eca8ada",
+      "sha256": "1da58b1e662ad36262b43c088e48b930edbe9b6e00228957a5b88aeff0e52659",
       "origin": "integration work 2026-10-05",
-      "last_modified_on": "2026-10-05"
+      "last_modified_on": "2026-11-12"
     },
     {
       "path": "THIRD_PARTY_NOTICES.md",
-      "sha256": "1da469b30d84803333603f654469732b7e39aa9ee84f81133ed8b76a673cdc99",
-      "origin": "integration work 2026-10-05"
+      "sha256": "53ecf461a91e5b00bc82ee5bc6f660ef19599fd897607a4f9a4ac54ad9be2a35",
+      "origin": "integration work 2026-10-05",
+      "last_modified_on": "2026-11-12"
     },
     {
       "path": "experimental/surface_enhancement_lab.py",
@@ -167,12 +169,16 @@
     },
     {
       "path": "vessel_voxel_volume.py",
-      "sha256": "c629c8f535db6f99a6c6bc0264f9bdd0ade3b64234ed468ffe7cf01fa42e341c",
+      "sha256": "9e4d9c18058fab00325ba085d729453448fdc9798e60b10c17a46153a58cc450",
       "origin": "https://github.com/kotdijian/PotteryVolumeCalculator",
-      "upstream_ref": "d756a5667f860705fa5ffaef8e4fb81dcd93e059",
-      "upstream_version": "v1.3.2",
-      "upstream_sha256": "c629c8f535db6f99a6c6bc0264f9bdd0ade3b64234ed468ffe7cf01fa42e341c",
-      "modified": false
+      "upstream_ref": "93fbdbad24f22c38423d9e1b4780622b2ef8ccab",
+      "upstream_version": "v1.4.0",
+      "upstream_sha256": "41e658898e28f146239c065342ba683daf593aa757739f8af6a2c3b39f835f20",
+      "modified": true,
+      "upstream_path": "vessel_voxel_volume.py",
+      "last_modified_on": "2026-11-12",
+      "local_version": "1.4.0",
+      "modification_note": "Integrate AOM posture comparison and MorphPot metadata/unit validation without applying a second pose."
     },
     {
       "path": "morphpot/section_overlay.py",
@@ -227,6 +233,101 @@
       "origin": "MorphPot development 2026-10-05",
       "last_modified_on": "2026-10-05",
       "sha256": "c615ceea2196b961148eb65e4219ff5ddd5b7b121aaa1b57718bad87ff28d9ec"
+    },
+    {
+      "path": "pose_comparison.py",
+      "origin": "https://github.com/kotdijian/PotteryVolumeCalculator",
+      "upstream_ref": "93fbdbad24f22c38423d9e1b4780622b2ef8ccab",
+      "upstream_path": "pose_comparison.py",
+      "upstream_sha256": "e30e444ae42f383a3e952d6baed061ad5122d71974310a6b228a4fc592db8c70",
+      "sha256": "a12b14f0fd39b307d23c613c67b1cbe68ed96701487e3150919187ffa89c3210",
+      "modified": true,
+      "last_modified_on": "2026-11-12",
+      "upstream_version": "v1.4.0",
+      "local_version": "1.4.0",
+      "modification_note": "Integrate AOM posture comparison and MorphPot metadata/unit validation without applying a second pose."
+    },
+    {
+      "path": "docs/capacity/README_EN.md",
+      "origin": "https://github.com/kotdijian/PotteryVolumeCalculator",
+      "upstream_ref": "93fbdbad24f22c38423d9e1b4780622b2ef8ccab",
+      "upstream_path": "README_EN.md",
+      "upstream_sha256": "ac8efadae215c3f21490628f3638bdc1453088e67a73e7165cdcedb8978930c2",
+      "sha256": "019bb8741212b6c4809466a53327dc7d7e00d45a8d7996e24b05713984cea2f9",
+      "modified": true,
+      "last_modified_on": "2026-11-12"
+    },
+    {
+      "path": "docs/capacity/LICENSE-CC0.txt",
+      "origin": "https://github.com/kotdijian/PotteryVolumeCalculator",
+      "upstream_ref": "93fbdbad24f22c38423d9e1b4780622b2ef8ccab",
+      "upstream_path": "LICENSE",
+      "upstream_sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "modified": false,
+      "last_modified_on": "2026-11-12"
+    },
+    {
+      "path": "docs/capacity/validation/surface-trace-v0.1.0.md",
+      "origin": "https://github.com/kotdijian/PotteryVolumeCalculator",
+      "upstream_ref": "93fbdbad24f22c38423d9e1b4780622b2ef8ccab",
+      "upstream_path": "docs/validation/surface-trace-v0.1.0.md",
+      "upstream_sha256": "5248e9b9a1f32c5537c64f4a2465c678d6f99d794898ef20cd98ae9d6915377a",
+      "sha256": "5248e9b9a1f32c5537c64f4a2465c678d6f99d794898ef20cd98ae9d6915377a",
+      "modified": false,
+      "last_modified_on": "2026-11-12"
+    },
+    {
+      "path": "docs/capacity/validation/PotteryVolumeCalculator_development_validation_report_v1.3.1.md",
+      "origin": "https://github.com/kotdijian/PotteryVolumeCalculator",
+      "upstream_ref": "93fbdbad24f22c38423d9e1b4780622b2ef8ccab",
+      "upstream_path": "docs/validation/PotteryVolumeCalculator_development_validation_report_v1.3.1.md",
+      "upstream_sha256": "f57fa62e0facf8bddaeec43eab0f43f4818726b514d4bf356ce25461274665f8",
+      "sha256": "be0d180c1f766a354cc79b5b4adb6503f800467e47e8ac5eddacc109bae044c7",
+      "modified": true,
+      "last_modified_on": "2026-11-12"
+    },
+    {
+      "path": "docs/capacity/archive/drawing-capacity-v0.5.0.md",
+      "origin": "https://github.com/kotdijian/PotteryVolumeCalculator",
+      "upstream_ref": "93fbdbad24f22c38423d9e1b4780622b2ef8ccab",
+      "upstream_path": "docs/drawing-capacity-v0.5.0.md",
+      "upstream_sha256": "70d7ba208cabf6dd6dc83e9700a68a34f7a4aa14fc15ef0178f0b21ef736fd50",
+      "sha256": "f1218d077e1f460e6a7ba35d93709a99e875e9ec37acdec92830da702a1fd975",
+      "modified": true,
+      "last_modified_on": "2026-11-12"
+    },
+    {
+      "path": "docs/capacity/archive/radial-sections-v0.4.0.md",
+      "origin": "https://github.com/kotdijian/PotteryVolumeCalculator",
+      "upstream_ref": "93fbdbad24f22c38423d9e1b4780622b2ef8ccab",
+      "upstream_path": "docs/radial-sections-v0.4.0.md",
+      "upstream_sha256": "67e7d3fc95bd316c0878481f50079eb1787ef8583a1c9fcf30947b384cd31874",
+      "sha256": "7ed8fd0a60308ce4b3ea619b8a3243739dd2595d59ceb2c022b4a54a03b4ca4d",
+      "modified": true,
+      "last_modified_on": "2026-11-12"
+    },
+    {
+      "path": "docs/capacity/archive/section-workflows-v0.6.0.md",
+      "origin": "https://github.com/kotdijian/PotteryVolumeCalculator",
+      "upstream_ref": "93fbdbad24f22c38423d9e1b4780622b2ef8ccab",
+      "upstream_path": "docs/archive/section-workflows-v0.6.0.md",
+      "upstream_sha256": "b042fcd9187bd1a5215d13bfe639ac55f5ed2c4f8843f0dc70a73b002d8e4aee",
+      "sha256": "3cb368c644f5ec6550d43f27533887ae4e4d5d68ff7df56a9089a7c3fec13b5f",
+      "modified": true,
+      "last_modified_on": "2026-11-12"
+    },
+    {
+      "path": "docs/capacity/README.md",
+      "origin": "MorphPot capacity migration",
+      "sha256": "a47cb7c38762d175bb0d696a346bae34599f6d29cce6fa86b5499f4016f3b8ab",
+      "last_modified_on": "2026-11-12"
+    },
+    {
+      "path": "tests/test_volume_migration.py",
+      "origin": "MorphPot capacity migration",
+      "sha256": "68ec3f0a6d74514a8da50b3bc45669bc91513edd7e3c33e52506e43770ca6f24",
+      "last_modified_on": "2026-11-12"
     }
   ]
 }

@@ -8,3 +8,5 @@ PotteryVolumeCalculator and PotteryReconstruction3D upstream repositories carry 
 Surface Enhancement Lab v0.7.3 and the reconstruction development snapshots originate from the project owner's previously distributed files. Their source code is preserved with origin and version information; they are not presented as a new validated stable release.
 
 Third-party Python dependencies retain their own licenses and are not vendored.
+
+The [original CC0 license text](docs/capacity/LICENSE-CC0.txt) accompanies the transferred PotteryVolumeCalculator code and documentation. Its source snapshot is recorded in SOURCE_PROVENANCE.json.
